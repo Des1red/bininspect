@@ -1,0 +1,4 @@
+github.com/Des1red/clihelp v1.0.2 h1:3jE0u7B8y5oGdrUDfj6Vfa4tpmmwFUmSdMMae3ZWloY=
+github.com/Des1red/clihelp v1.0.2/go.mod h1:4sMd2I5rpd6Sqb/o9EC4P37OajqkQeZMzxGZ2TIPaTg=
+github.com/spf13/pflag v1.0.10 h1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=
+github.com/spf13/pflag v1.0.10/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
