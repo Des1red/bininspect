@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
-func flags() {
+func flags() (string, bool) {
 	var help bool
 
 	pflag.StringVarP(&models.Scope.Target, "target", "t", "", "target binary to analyze")
@@ -20,32 +20,50 @@ func flags() {
 
 	if help {
 		printHelp()
-		return
+		return "", false
 	}
 
-	if len(pflag.Args()) > 0 {
-		fmt.Fprintf(os.Stderr, "unknown command: %s\n\n", pflag.Arg(0))
+	args := pflag.Args()
+
+	if len(args) > 0 {
+		switch args[0] {
+		case "install", "uninstall":
+			if len(args) == 1 && models.Scope.Target == "" {
+				return args[0], true
+			}
+		}
+
+		fmt.Fprintf(os.Stderr, "invalid command or arguments: %v\n\n", args)
 		printHelp()
-		os.Exit(1)
+		return "", false
 	}
 
 	if models.Scope.Target == "" {
 		printHelp()
-		return
+		return "", false
 	}
+
+	return "inspect", true
 }
 
 func printHelp() {
 	fmt.Println("BinInspect - Static Binary Analyzer")
 	fmt.Println("\nUsage: bininspect [flags]")
-
+	fmt.Println()
 	fmt.Println("\nFlags:")
 	clihelp.Print(
 		clihelp.F("-t, --target", "path", "target binary to analyze"),
 		clihelp.F("-h, --help", "", "show help menu"),
 	)
-
+	fmt.Println()
+	fmt.Println("\nCommands:")
+	clihelp.Print(
+		clihelp.F("install", "", "build and install BinInspect"),
+		clihelp.F("uninstall", "", "remove installed BinInspect binaries"),
+	)
+	fmt.Println()
 	fmt.Println("\nExamples:")
 	fmt.Println("  bininspect -t ./ex00/bin")
-	fmt.Println("  bininspect --target /usr/bin/ls")
+	fmt.Println("  bininspect install")
+	fmt.Println("  bininspect uninstall")
 }

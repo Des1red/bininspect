@@ -1,4 +1,6 @@
 github.com/Des1red/clihelp v1.0.2 h1:3jE0u7B8y5oGdrUDfj6Vfa4tpmmwFUmSdMMae3ZWloY=
 github.com/Des1red/clihelp v1.0.2/go.mod h1:4sMd2I5rpd6Sqb/o9EC4P37OajqkQeZMzxGZ2TIPaTg=
+github.com/Des1red/goinstall v0.0.0-20261007174718-294c4b350a05 h1:i8rrHbVXaelv19+K/kfuvpCNw0V8kJXkhwrow2jVorc=
+github.com/Des1red/goinstall v0.0.0-20261007174718-294c4b350a05/go.mod h1:OJZB4fBTCFol58fG6nrivVbQda5E+OcqDEWOJ1HPCds=
 github.com/spf13/pflag v1.0.10 h1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=
 github.com/spf13/pflag v1.0.10/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
