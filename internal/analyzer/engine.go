@@ -10,6 +10,7 @@ func Engine() {
 	result.Structure = Structure()
 
 	result.Assembly = Assembly(result.Identity.Architecture)
+	result.Assembly.StackRelations = StackRelations(result.Assembly)
 
 	result.Functions, result.FunctionDefinitions = Functions(
 		result.Assembly,
@@ -20,6 +21,7 @@ func Engine() {
 	result.Findings = Findings(
 		result.Functions,
 		result.Security,
+		result.Assembly.StackRelations...,
 	)
 
 	models.Results = result

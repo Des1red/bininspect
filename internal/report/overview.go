@@ -13,7 +13,7 @@ func Overview(r models.ResultsModel) {
 	structure(r.Structure)
 	assembly(r.Assembly)
 	functions(r.Functions, r.FunctionDefinitions)
-	sources(r.Sources)
+	sources(r.Sources, r.Identity.Format)
 }
 
 func identity(id models.BinaryIdentity) {
@@ -80,6 +80,40 @@ func assembly(a models.AssemblyAnalysis) {
 				allocation.Size,
 				short(allocation.Function, 28),
 			))
+		}
+	}
+	if len(a.StackRelations) > 0 {
+		rows = append(rows, "", "Potential stack relationships:")
+
+		for i, relation := range a.StackRelations {
+			if i == 3 {
+				rows = append(rows, fmt.Sprintf(
+					"... and %d more",
+					len(a.StackRelations)-i,
+				))
+				break
+			}
+
+			rows = append(rows,
+				fmt.Sprintf(
+					"  %s: %s()",
+					relation.Function,
+					relation.API,
+				),
+				fmt.Sprintf(
+					"  %s -> %s",
+					relation.InputReference,
+					relation.CheckedReference,
+				),
+				fmt.Sprintf(
+					"  Separation: %d bytes",
+					relation.Distance,
+				),
+				fmt.Sprintf(
+					"  Checked by branch: 0x%s",
+					relation.BranchSite,
+				),
+			)
 		}
 	}
 
@@ -152,21 +186,62 @@ func functions(
 	box("04  FUNCTION ANALYSIS", rows...)
 }
 
-func sources(sources map[string]models.SourceSummary) {
-	names := make([]string, 0, len(sources))
+func sources(
+	collected map[string]models.SourceSummary,
+	format string,
+) {
+	applicable := []string{"file", "strings"}
 
-	for name := range sources {
-		names = append(names, name)
+	switch format {
+	case "ELF":
+		applicable = append(applicable,
+			"elf", "programs", "sections", "symbols",
+			"dynamic", "relocs", "notes", "security",
+			"assembly", "rawdata", "debug",
+		)
+
+	case "PE":
+		applicable = append(applicable,
+			"pe", "sections", "symbols", "dynamic",
+			"relocs", "assembly", "rawdata",
+		)
+
+	case "Mach-O":
+		applicable = append(applicable,
+			"macho", "programs", "sections", "symbols",
+			"dynamic", "relocs", "security",
+			"assembly", "rawdata", "debug",
+		)
+
+	default:
+		applicable = append(applicable,
+			"unknown", "rawdata",
+		)
 	}
 
-	sort.Strings(names)
+	optional := map[string]bool{
+		"debug":   true,
+		"notes":   true,
+		"symbols": true,
+		"dynamic": true,
+		"relocs":  true,
+	}
+
+	if format == "Mach-O" {
+		optional["assembly"] = true
+	}
 
 	available := 0
-	var missing []string
+	var missing, absent []string
 
-	for _, name := range names {
-		if sources[name].Available {
+	for _, name := range applicable {
+		if collected[name].Available {
 			available++
+			continue
+		}
+
+		if optional[name] {
+			absent = append(absent, name)
 		} else {
 			missing = append(missing, name)
 		}
@@ -174,16 +249,29 @@ func sources(sources map[string]models.SourceSummary) {
 
 	rows := []string{
 		fmt.Sprintf(
-			"Available datasets: %d/%d",
-			available, len(names),
+			"Available:       %d/%d applicable datasets",
+			available, len(applicable),
+		),
+		fmt.Sprintf(
+			"Not applicable:  %d format-specific datasets",
+			len(collected)-len(applicable),
 		),
 	}
 
 	if len(missing) > 0 {
-		rows = append(rows, "Unavailable / empty:")
-		rows = append(rows, "  "+short(
-			strings.Join(missing, ", "), 65,
-		))
+		rows = append(rows,
+			"",
+			"Unavailable or empty:",
+			"  "+strings.Join(missing, ", "),
+		)
+	}
+
+	if len(absent) > 0 {
+		rows = append(rows,
+			"",
+			"Optional data absent:",
+			"  "+strings.Join(absent, ", "),
+		)
 	}
 
 	box("05  COLLECTION COVERAGE", rows...)

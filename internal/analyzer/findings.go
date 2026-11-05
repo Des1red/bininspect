@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"bininspect/internal/models"
@@ -44,67 +45,84 @@ var riskyFunctions = map[string]riskyFunction{
 func Findings(
 	calls []models.FunctionCall,
 	security models.SecurityAnalysis,
+	relations ...models.StackRelation,
 ) []models.Finding {
 	var findings []models.Finding
-	seen := make(map[string]bool)
 
-	add := func(f models.Finding) {
-		key := f.Category + ":" + f.Evidence
-
-		if seen[key] {
-			return
-		}
-
-		seen[key] = true
-		findings = append(findings, f)
-	}
-
-	for _, call := range calls {
-		name := strings.TrimLeft(call.Name, "_")
-
-		risk, exists := riskyFunctions[name]
-		if !exists {
-			continue
-		}
-
-		add(models.Finding{
-			ID:         fmt.Sprintf("FUNC-%s-%s", name, call.Address),
-			Category:   "Unsafe function call",
-			Severity:   risk.Severity,
-			Confidence: "high",
-			Description: fmt.Sprintf(
-				"Call to %s: %s", name, risk.Description,
-			),
-			Evidence: fmt.Sprintf(
-				"0x%s: %s", call.Address, call.Instruction,
-			),
-			Recommendation: risk.Recommendation,
-		})
-	}
-
-	// Imported symbols may be visible even when calls cannot
-	// be recovered from the disassembly.
-	importSources := models.Knowledge.Dynamic + "\n" +
+	imports := models.Knowledge.Dynamic + "\n" +
 		models.Knowledge.Symbols
 
-	for name, risk := range riskyFunctions {
-		if !symbolMentioned(importSources, name) {
+	names := make([]string, 0, len(riskyFunctions))
+
+	for name := range riskyFunctions {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		risk := riskyFunctions[name]
+
+		var evidence []string
+		confidence := "low"
+
+		for _, call := range calls {
+			if strings.TrimLeft(call.Name, "_") != name {
+				continue
+			}
+
+			evidence = append(evidence, fmt.Sprintf(
+				"Call at 0x%s: %s",
+				call.Address,
+				call.Instruction,
+			))
+
+			confidence = "high"
+		}
+
+		if symbolMentioned(imports, name) {
+			evidence = append(
+				evidence,
+				"Import/symbol reference: "+name,
+			)
+		}
+
+		if len(evidence) == 0 {
 			continue
 		}
 
-		add(models.Finding{
-			ID:             "IMPORT-" + name,
-			Category:       "Potentially unsafe imported function",
+		for _, relation := range relations {
+			if relation.API != name {
+				continue
+			}
+
+			evidence = append(evidence, fmt.Sprintf(
+				"Heuristic stack relationship in %s: "+
+					"%s -> %s; %d-byte separation; "+
+					"checked at 0x%s, branch at 0x%s "+
+					"(zero-initialized: %t)",
+				relation.Function,
+				relation.InputReference,
+				relation.CheckedReference,
+				relation.Distance,
+				relation.ReadSite,
+				relation.BranchSite,
+				relation.InitializedZero,
+			))
+		}
+
+		findings = append(findings, models.Finding{
+			ID:             "API-" + name,
+			Category:       "Potentially unsafe API",
 			Severity:       risk.Severity,
-			Confidence:     "low",
+			Confidence:     confidence,
 			Description:    risk.Description,
-			Evidence:       "Symbol/import reference: " + name,
+			Evidence:       strings.Join(evidence, "\n"),
 			Recommendation: risk.Recommendation,
 		})
 	}
 
 	if security.NX.Status == "disabled" {
-		add(models.Finding{
+		findings = append(findings, models.Finding{
 			ID:             "SEC-NX",
 			Category:       "Executable stack",
 			Severity:       "medium",
@@ -116,7 +134,7 @@ func Findings(
 	}
 
 	if security.PIE.Status == "disabled" {
-		add(models.Finding{
+		findings = append(findings, models.Finding{
 			ID:             "SEC-PIE",
 			Category:       "Non-PIE executable",
 			Severity:       "low",

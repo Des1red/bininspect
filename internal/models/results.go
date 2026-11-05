@@ -48,12 +48,25 @@ type AssemblyAnalysis struct {
 	Branches         int
 	Returns          int
 	StackAllocations []StackAllocation
+	StackRelations   []StackRelation
 }
 
 type StackAllocation struct {
 	Address  string
 	Function string
 	Size     uint64
+}
+
+type StackRelation struct {
+	Function         string
+	API              string
+	CallSite         string
+	InputReference   string
+	ReadSite         string
+	CheckedReference string
+	BranchSite       string
+	Distance         int64
+	InitializedZero  bool
 }
 
 type FunctionCall struct {

@@ -95,9 +95,10 @@ func Sources() map[string]models.SourceSummary {
 		}
 
 		result[name] = models.SourceSummary{
-			Available: data != "",
-			Lines:     count,
-			Bytes:     len(data),
+			Available: strings.TrimSpace(data) != "" &&
+				!strings.HasPrefix(data, "Disassembly unavailable:"),
+			Lines: count,
+			Bytes: len(data),
 		}
 	}
 
