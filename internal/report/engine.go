@@ -41,6 +41,7 @@ func render(r models.ResultsModel) {
 	Overview(r)
 	Security(r)
 	Findings(r)
+	Summary(r)
 
 	emitln()
 	emitln(paint(green, "Analysis complete."))
