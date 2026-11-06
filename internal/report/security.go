@@ -8,9 +8,9 @@ import (
 )
 
 func Security(r models.ResultsModel) {
-	fmt.Println("┌" + strings.Repeat("─", width) + "┐")
+	emitln("┌" + strings.Repeat("─", width) + "┐")
 	boxLine(paint(bold+cyan, "06  SECURITY PROTECTIONS"))
-	fmt.Println("├" + strings.Repeat("─", width) + "┤")
+	emitln("├" + strings.Repeat("─", width) + "┤")
 
 	securityRow("NX", r.Security.NX)
 	securityRow("PIE", r.Security.PIE)
@@ -19,7 +19,7 @@ func Security(r models.ResultsModel) {
 	securityRow("ASLR", r.Security.ASLR)
 	securityRow("CFG", r.Security.CFG)
 
-	fmt.Println("└" + strings.Repeat("─", width) + "┘")
+	emitln("└" + strings.Repeat("─", width) + "┘")
 }
 
 func securityRow(name string, check models.SecurityCheck) {
@@ -34,7 +34,7 @@ func securityRow(name string, check models.SecurityCheck) {
 	if check.Evidence != "" {
 		// Evidence is shortened rather than dumping raw headers.
 		for _, line := range wrap(
-			"Evidence: "+short(check.Evidence, 115),
+			"Evidence: "+reportText(check.Evidence, 115),
 			width-4,
 		) {
 			boxLine(paint(gray, "  "+line))

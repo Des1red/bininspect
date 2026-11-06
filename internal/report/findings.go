@@ -34,7 +34,7 @@ func Findings(r models.ResultsModel) {
 		counts[strings.ToLower(finding.Severity)]++
 	}
 
-	fmt.Printf(
+	emitf(
 		"Total: %d | Critical: %d | High: %d | Medium: %d | Low: %d\n\n",
 		len(findings),
 		counts["critical"],
@@ -44,8 +44,8 @@ func Findings(r models.ResultsModel) {
 	)
 
 	for i, finding := range findings {
-		if i >= maxFindings {
-			fmt.Printf(
+		if !fullReport && i >= maxFindings {
+			emitf(
 				"\n... %d additional findings omitted from terminal view\n",
 				len(findings)-maxFindings,
 			)
@@ -59,19 +59,21 @@ func Findings(r models.ResultsModel) {
 func printFinding(index int, finding models.Finding) {
 	severity := strings.ToUpper(finding.Severity)
 
-	fmt.Println("┌" + strings.Repeat("─", width) + "┐")
+	emitln("┌" + strings.Repeat("─", width) + "┐")
 
 	title := fmt.Sprintf(
 		"FINDING %02d  [%s]  %s",
 		index,
 		severity,
-		short(finding.ID, 30),
+		reportText(finding.ID, 30),
 	)
 
 	boxLine(paint(statusColor(finding.Severity), title))
 
-	fmt.Println("├" + strings.Repeat("─", width) + "┤")
-
+	emitln("├" + strings.Repeat("─", width) + "┤")
+	if fullReport {
+		findingRows("ID", finding.ID)
+	}
 	findingRows("Category", finding.Category)
 	findingRows("Severity", severity)
 	findingRows("Confidence", finding.Confidence)
@@ -83,7 +85,7 @@ func printFinding(index int, finding models.Finding) {
 	boxLine("")
 	findingRows("Recommendation", finding.Recommendation)
 
-	fmt.Println("└" + strings.Repeat("─", width) + "┘")
+	emitln("└" + strings.Repeat("─", width) + "┘")
 }
 
 func findingRows(label, value string) {

@@ -1,7 +1,6 @@
 package report
 
 import (
-	"fmt"
 	"os"
 	"strings"
 	"unicode/utf8"
@@ -40,15 +39,15 @@ func paint(color, value string) string {
 }
 
 func header(title string) {
-	fmt.Println()
-	fmt.Println(paint(bold+cyan, title))
-	fmt.Println(paint(gray, strings.Repeat("━", width)))
+	emitln()
+	emitln(paint(bold+cyan, title))
+	emitln(paint(gray, strings.Repeat("━", width)))
 }
 
 func box(title string, rows ...string) {
-	fmt.Println("┌" + strings.Repeat("─", width) + "┐")
+	emitln("┌" + strings.Repeat("─", width) + "┐")
 	boxLine(paint(bold+cyan, title))
-	fmt.Println("├" + strings.Repeat("─", width) + "┤")
+	emitln("├" + strings.Repeat("─", width) + "┤")
 
 	for _, row := range rows {
 		for _, line := range wrap(row, width-2) {
@@ -56,7 +55,7 @@ func box(title string, rows ...string) {
 		}
 	}
 
-	fmt.Println("└" + strings.Repeat("─", width) + "┘")
+	emitln("└" + strings.Repeat("─", width) + "┘")
 }
 
 func boxLine(value string) {
@@ -68,7 +67,7 @@ func boxLine(value string) {
 		padding = 0
 	}
 
-	fmt.Printf("│ %s%s │\n", value, strings.Repeat(" ", padding))
+	emitf("│ %s%s │\n", value, strings.Repeat(" ", padding))
 }
 
 func wrap(value string, limit int) []string {

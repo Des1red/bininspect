@@ -41,13 +41,13 @@ func structure(s models.BinaryStructure) {
 		rows = append(rows, "", "Dependencies:")
 
 		for i, library := range s.Libraries {
-			if i == 5 {
+			if !fullReport && i == 5 {
 				rows = append(rows,
 					fmt.Sprintf("... and %d more", len(s.Libraries)-i))
 				break
 			}
 
-			rows = append(rows, "  "+short(library, 65))
+			rows = append(rows, "  "+reportText(library, 65))
 		}
 	}
 
@@ -67,7 +67,7 @@ func assembly(a models.AssemblyAnalysis) {
 		rows = append(rows, "", "Stack allocations:")
 
 		for i, allocation := range a.StackAllocations {
-			if i == 5 {
+			if !fullReport && i == 5 {
 				rows = append(rows,
 					fmt.Sprintf("... and %d more",
 						len(a.StackAllocations)-i))
@@ -78,7 +78,7 @@ func assembly(a models.AssemblyAnalysis) {
 				"  0x%s  %d bytes  %s",
 				allocation.Address,
 				allocation.Size,
-				short(allocation.Function, 28),
+				reportText(allocation.Function, 28),
 			))
 		}
 	}
@@ -139,7 +139,7 @@ func assembly(a models.AssemblyAnalysis) {
 					"    Arg %d (%s): %s",
 					arg.Position,
 					arg.Location,
-					short(arg.Expression, 42),
+					reportText(arg.Expression, 42),
 				))
 			}
 		}
@@ -205,7 +205,7 @@ func functions(
 
 		rows = append(rows, fmt.Sprintf(
 			"  %-40s %d calls",
-			short(item.name, 40),
+			reportText(item.name, 40),
 			item.count,
 		))
 	}
