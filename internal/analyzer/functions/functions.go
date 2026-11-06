@@ -1,13 +1,14 @@
-package analyzer
+package functions
 
 import (
 	"strconv"
 	"strings"
 
+	"bininspect/internal/analyzer/shared"
 	"bininspect/internal/models"
 )
 
-func Functions(
+func Analyze(
 	assembly models.AssemblyAnalysis,
 ) ([]models.FunctionCall, []models.FunctionInfo) {
 
@@ -21,13 +22,10 @@ func Functions(
 	for _, line := range strings.Split(
 		models.Knowledge.Assembly, "\n",
 	) {
-		match := functionHeader.FindStringSubmatch(line)
-		if match == nil {
+		address, name, ok := shared.FunctionHeader(line)
+		if !ok {
 			continue
 		}
-
-		address := match[1]
-		name := match[2]
 
 		if _, exists := byName[name]; exists {
 			continue
@@ -99,8 +97,8 @@ func Functions(
 
 	// Remove duplicate call relationships.
 	for i := range functions {
-		functions[i].Calls = unique(functions[i].Calls)
-		functions[i].Callers = unique(functions[i].Callers)
+		functions[i].Calls = shared.Unique(functions[i].Calls)
+		functions[i].Callers = shared.Unique(functions[i].Callers)
 	}
 
 	return calls, functions

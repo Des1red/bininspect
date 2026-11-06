@@ -49,6 +49,7 @@ type AssemblyAnalysis struct {
 	Returns          int
 	StackAllocations []StackAllocation
 	StackRelations   []StackRelation
+	CallFlows        []CallFlow
 }
 
 type StackAllocation struct {
@@ -67,6 +68,10 @@ type StackRelation struct {
 	BranchSite       string
 	Distance         int64
 	InitializedZero  bool
+	SourceReference  string
+	ComparedValue    string
+	BranchCondition  string
+	Confidence       string
 }
 
 type FunctionCall struct {
@@ -98,6 +103,20 @@ type SecurityAnalysis struct {
 	Canary SecurityCheck
 	ASLR   SecurityCheck
 	CFG    SecurityCheck
+}
+
+type ArgumentFlow struct {
+	Position       int
+	Location       string
+	Expression     string
+	StackReference string
+}
+
+type CallFlow struct {
+	Function  string
+	API       string
+	Address   string
+	Arguments []ArgumentFlow
 }
 
 type Finding struct {

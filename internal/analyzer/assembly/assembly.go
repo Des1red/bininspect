@@ -1,18 +1,15 @@
-package analyzer
+package assembly
 
 import (
 	"regexp"
 	"strconv"
 	"strings"
 
+	"bininspect/internal/analyzer/shared"
 	"bininspect/internal/models"
 )
 
 var (
-	functionHeader = regexp.MustCompile(
-		`^\s*([0-9a-fA-F]+)\s+<(.+)>:\s*$`,
-	)
-
 	addressPattern = regexp.MustCompile(
 		`^\s*([0-9a-fA-F]+):\s*(.*)$`,
 	)
@@ -28,7 +25,7 @@ var (
 	)
 )
 
-func Assembly(architecture string) models.AssemblyAnalysis {
+func Analyze(architecture string) models.AssemblyAnalysis {
 	result := models.AssemblyAnalysis{
 		Architecture: architecture,
 	}
@@ -38,8 +35,8 @@ func Assembly(architecture string) models.AssemblyAnalysis {
 	for _, line := range strings.Split(
 		models.Knowledge.Assembly, "\n",
 	) {
-		if match := functionHeader.FindStringSubmatch(line); match != nil {
-			currentFunction = match[2]
+		if _, name, ok := shared.FunctionHeader(line); ok {
+			currentFunction = name
 			continue
 		}
 

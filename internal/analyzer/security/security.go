@@ -1,12 +1,13 @@
-package analyzer
+package security
 
 import (
 	"strings"
 
+	"bininspect/internal/analyzer/shared"
 	"bininspect/internal/models"
 )
 
-func Security() models.SecurityAnalysis {
+func Analyze() models.SecurityAnalysis {
 	unknown := models.SecurityCheck{
 		Status: "unknown",
 	}
@@ -48,7 +49,7 @@ func Security() models.SecurityAnalysis {
 func elfSecurity(result *models.SecurityAnalysis) {
 	k := models.Knowledge
 
-	for _, line := range lines(k.Programs) {
+	for _, line := range shared.Lines(k.Programs) {
 		fields := strings.Fields(line)
 
 		if len(fields) < 3 || fields[0] != "GNU_STACK" {
@@ -72,13 +73,13 @@ func elfSecurity(result *models.SecurityAnalysis) {
 
 	switch {
 	case strings.Contains(k.ELF, "Type:") &&
-		strings.Contains(field(k.ELF, "Type:"), "EXEC"):
+		strings.Contains(shared.Field(k.ELF, "Type:"), "EXEC"):
 		result.PIE = models.SecurityCheck{
 			Status:   "disabled",
-			Evidence: field(k.ELF, "Type:"),
+			Evidence: shared.Field(k.ELF, "Type:"),
 		}
 
-	case strings.Contains(field(k.ELF, "Type:"), "DYN"):
+	case strings.Contains(shared.Field(k.ELF, "Type:"), "DYN"):
 		result.PIE = models.SecurityCheck{
 			Status:   "possible",
 			Evidence: "ET_DYN may indicate PIE or a shared object",
@@ -105,7 +106,7 @@ func peSecurity(result *models.SecurityAnalysis) {
 	data := models.Knowledge.Dynamic
 
 	flags := ""
-	for _, line := range lines(data) {
+	for _, line := range shared.Lines(data) {
 		if strings.Contains(line, "DllCharacteristics") {
 			flags += line + "\n"
 		}

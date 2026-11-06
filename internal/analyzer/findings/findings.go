@@ -1,10 +1,11 @@
-package analyzer
+package findings
 
 import (
 	"fmt"
 	"sort"
 	"strings"
 
+	"bininspect/internal/analyzer/shared"
 	"bininspect/internal/models"
 )
 
@@ -42,7 +43,7 @@ var riskyFunctions = map[string]riskyFunction{
 	},
 }
 
-func Findings(
+func Analyze(
 	calls []models.FunctionCall,
 	security models.SecurityAnalysis,
 	relations ...models.StackRelation,
@@ -96,15 +97,21 @@ func Findings(
 			}
 
 			evidence = append(evidence, fmt.Sprintf(
-				"Heuristic stack relationship in %s: "+
-					"%s -> %s; %d-byte separation; "+
-					"checked at 0x%s, branch at 0x%s "+
-					"(zero-initialized: %t)",
+				"Heuristic stack relationship in %s:\n"+
+					"Destination: %s\n"+
+					"Source: %s\n"+
+					"Checked location: %s\n"+
+					"Separation: %d bytes\n"+
+					"Compared value: %s\n"+
+					"Branch: %s at 0x%s\n"+
+					"Initially zero: %t",
 				relation.Function,
 				relation.InputReference,
+				relation.SourceReference,
 				relation.CheckedReference,
 				relation.Distance,
-				relation.ReadSite,
+				relation.ComparedValue,
+				relation.BranchCondition,
 				relation.BranchSite,
 				relation.InitializedZero,
 			))
@@ -149,7 +156,7 @@ func Findings(
 }
 
 func symbolMentioned(data, name string) bool {
-	for _, line := range lines(data) {
+	for _, line := range shared.Lines(data) {
 		for _, token := range strings.FieldsFunc(line, func(r rune) bool {
 			return !(r >= 'a' && r <= 'z') &&
 				!(r >= 'A' && r <= 'Z') &&

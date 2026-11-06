@@ -116,7 +116,34 @@ func assembly(a models.AssemblyAnalysis) {
 			)
 		}
 	}
+	if len(a.CallFlows) > 0 {
+		rows = append(rows, "", "Tracked API arguments:")
 
+		for i, call := range a.CallFlows {
+			if i >= 4 {
+				rows = append(rows, fmt.Sprintf(
+					"... and %d more",
+					len(a.CallFlows)-i,
+				))
+				break
+			}
+
+			rows = append(rows, fmt.Sprintf(
+				"  %s() at 0x%s",
+				call.API,
+				call.Address,
+			))
+
+			for _, arg := range call.Arguments {
+				rows = append(rows, fmt.Sprintf(
+					"    Arg %d (%s): %s",
+					arg.Position,
+					arg.Location,
+					short(arg.Expression, 42),
+				))
+			}
+		}
+	}
 	box("03  ASSEMBLY ANALYSIS", rows...)
 }
 

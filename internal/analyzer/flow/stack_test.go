@@ -1,4 +1,4 @@
-package analyzer
+package flow
 
 import (
 	"testing"
@@ -24,8 +24,7 @@ func TestStackRelationsEx00(t *testing.T) {
 		},
 	}
 
-	relations := StackRelations(a)
-
+	relations := Analyze(a, "ELF").Relations
 	if len(relations) != 1 {
 		t.Fatalf("expected 1 relation, got %d", len(relations))
 	}
