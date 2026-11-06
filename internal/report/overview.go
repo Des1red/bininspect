@@ -196,7 +196,7 @@ func functions(
 	}
 
 	for i, item := range entries {
-		if i == 8 {
+		if !fullReport && i == 8 {
 			rows = append(rows, fmt.Sprintf(
 				"... and %d more", len(entries)-i,
 			))
