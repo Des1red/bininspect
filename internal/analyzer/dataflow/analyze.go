@@ -283,6 +283,7 @@ func Analyze(
 		out.Stack = append(out.Stack, stackUse)
 	}
 
+	out.Calls = mergeCallSites(out.Calls)
 	sort.Slice(out.Calls, func(i, j int) bool {
 		if out.Calls[i].Section != out.Calls[j].Section {
 			return out.Calls[i].Section < out.Calls[j].Section

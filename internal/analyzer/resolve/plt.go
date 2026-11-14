@@ -54,7 +54,19 @@ func PLTTargets(
 			graph.Name != ".plt.got" {
 			continue
 		}
+		// Identify Intel CET landing pads independently of CFG
+		// block boundaries. A CFG block may begin with padding
+		// preceding the actual PLT entry.
+		endbr := make(map[uint64]bool)
 
+		for _, block := range graph.Blocks {
+			for _, inst := range block.Instructions {
+				if inst.Mnemonic == "ENDBR64" &&
+					inst.Size == 4 {
+					endbr[inst.Address] = true
+				}
+			}
+		}
 		for _, block := range graph.Blocks {
 			for _, inst := range block.Instructions {
 				if inst.Flow != decoder.FlowJump ||
@@ -97,7 +109,20 @@ func PLTTargets(
 				}
 
 				if name, ok := gotSymbols[got]; ok {
-					result[block.Start] = name
+					entry := block.Start
+
+					// With CET-enabled PLT stubs, ENDBR64 marks the
+					// actual callable entry. The indirect JMP normally
+					// follows it immediately.
+					//
+					// Do not rely solely on CFG block.Start because
+					// that block may also contain preceding padding.
+					if inst.Address >= 4 &&
+						endbr[inst.Address-4] {
+						entry = inst.Address - 4
+					}
+
+					result[entry] = name
 				}
 			}
 		}
