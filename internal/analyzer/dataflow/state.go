@@ -112,17 +112,34 @@ func isFullRegister(raw string, arch binary.Architecture) bool {
 	return r == key
 }
 
-func (s state) stackAddress(op decoder.Operand) (int64, bool) {
-	if op.Kind != decoder.OperandMemory || op.Memory.Index != "" {
+func (s state) stackAddress(
+	op decoder.Operand,
+) (int64, bool) {
+	if op.Kind != decoder.OperandMemory ||
+		op.Memory.Index != "" {
 		return 0, false
 	}
+
 	base, ok := s.regs[canonicalRegister(op.Memory.Base)]
+
 	if !ok || base.Kind != "stack-address" {
 		return 0, false
 	}
-	return base.StackOffset + op.Memory.Displacement, true
-}
 
+	disp := op.Memory.Displacement
+
+	// An x86 disp32 is signed. Normalize values that
+	// were represented as zero-extended 32-bit offsets.
+	//
+	// This conversion is limited to memory references
+	// whose base is already known to be stack-relative.
+	if disp >= 1<<31 &&
+		disp <= (1<<32)-1 {
+		disp = int64(int32(uint32(disp)))
+	}
+
+	return base.StackOffset + disp, true
+}
 func (s state) read(
 	op decoder.Operand,
 	arch binary.Architecture,

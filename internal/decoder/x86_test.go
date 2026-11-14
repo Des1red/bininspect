@@ -264,3 +264,44 @@ func TestDecoderErrors(t *testing.T) {
 		t.Fatalf("accepted Thumb mode on x86: %v", err)
 	}
 }
+
+func TestX86CETLandingPads(t *testing.T) {
+	tests := []struct {
+		name     string
+		arch     binary.Architecture
+		bytes    []byte
+		mnemonic string
+	}{
+		{
+			name:     "ENDBR64",
+			arch:     binary.ArchX8664,
+			bytes:    []byte{0xF3, 0x0F, 0x1E, 0xFA},
+			mnemonic: "ENDBR64",
+		},
+		{
+			name:     "ENDBR32",
+			arch:     binary.ArchX86,
+			bytes:    []byte{0xF3, 0x0F, 0x1E, 0xFB},
+			mnemonic: "ENDBR32",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inst, err := decodeX86(
+				tt.bytes,
+				0x1000,
+				tt.arch,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if inst.Mnemonic != tt.mnemonic ||
+				inst.Size != 4 ||
+				inst.Flow != FlowNone {
+				t.Fatalf("incorrect CET decode: %+v", inst)
+			}
+		})
+	}
+}

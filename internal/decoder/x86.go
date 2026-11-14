@@ -20,6 +20,41 @@ func decodeX86(
 		mode = 64
 	}
 
+	// Recognize Intel CET indirect-branch landing pads.
+	//
+	// Preserve the actual four-byte instruction boundary.
+	// This also prevents PLT entries from being decoded
+	// starting in the middle of ENDBR instructions.
+	if len(data) >= 4 &&
+		data[0] == 0xF3 &&
+		data[1] == 0x0F &&
+		data[2] == 0x1E {
+
+		mnemonic := ""
+
+		switch {
+		case architecture == binary.ArchX8664 &&
+			data[3] == 0xFA:
+			mnemonic = "ENDBR64"
+
+		case architecture == binary.ArchX86 &&
+			data[3] == 0xFB:
+			mnemonic = "ENDBR32"
+		}
+
+		if mnemonic != "" {
+			return Instruction{
+				Address:     address,
+				Size:        4,
+				Bytes:       append([]byte(nil), data[:4]...),
+				Mnemonic:    mnemonic,
+				Flow:        FlowNone,
+				AddressBits: uint8(mode),
+				OperandBits: uint8(mode),
+			}, nil
+		}
+	}
+
 	native, err := x86asm.Decode(data, mode)
 	if err != nil {
 		kind := ErrInvalidInstruction
