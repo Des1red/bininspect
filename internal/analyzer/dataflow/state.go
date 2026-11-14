@@ -346,6 +346,20 @@ func (s *state) step(
 		}
 
 		delta := amount.Number
+
+		// ADD/SUB with a 32-bit immediate can encode a negative
+		// displacement as an unsigned-looking value.
+		//
+		// Normalize only when operating on a tracked stack address;
+		// do not reinterpret every constant in the analyzer.
+		if v.Kind == "stack-address" &&
+			args[1].Kind == decoder.OperandImmediate &&
+			delta >= 1<<31 &&
+			delta <= (1<<32)-1 {
+
+			delta = int64(int32(uint32(delta)))
+		}
+
 		if op == "SUB" {
 			delta = -delta
 		}
@@ -353,8 +367,10 @@ func (s *state) step(
 		switch v.Kind {
 		case "constant":
 			v.Number += delta
+
 		case "stack-address":
 			v.StackOffset += delta
+
 		default:
 			v = Value{}
 		}

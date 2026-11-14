@@ -119,16 +119,33 @@ func AnalyzeELF(
 		result.Functions,
 	)
 	result.Security = security.Analyze(parsed)
-	result.Warnings = append(
-		result.Warnings,
-		result.DataFlow.Warnings...,
-	)
+
 	result.Findings = findings.Evaluate(
 		parsed,
 		result.Graphs,
 		result.DataFlow,
 		result.Security,
 	)
+
+	result.Warnings = append(
+		result.Warnings,
+		result.DataFlow.Warnings...,
+	)
+
+	// Preserve warning order while removing duplicates.
+	seen := make(map[string]struct{}, len(result.Warnings))
+	unique := result.Warnings[:0]
+
+	for _, warning := range result.Warnings {
+		if _, exists := seen[warning]; exists {
+			continue
+		}
+
+		seen[warning] = struct{}{}
+		unique = append(unique, warning)
+	}
+
+	result.Warnings = unique
 
 	return result, nil
 }

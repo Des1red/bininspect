@@ -9,6 +9,7 @@ import (
 	"bininspect/internal/analyzer/dataflow"
 	"bininspect/internal/analyzer/security"
 	"bininspect/internal/binary"
+	"bininspect/internal/decoder"
 )
 
 func parsedExecutable() *binary.ELFResult {
@@ -217,5 +218,84 @@ func TestNilInput(t *testing.T) {
 		security.Result{},
 	); len(got) != 0 {
 		t.Fatalf("nil input: %+v", got)
+	}
+}
+
+func TestRiskyCallThroughPLT(t *testing.T) {
+	parsed := &binary.ELFResult{
+		Info: binary.Info{
+			Architecture: binary.ArchX8664,
+		},
+		Header: elf.FileHeader{
+			Type: elf.ET_EXEC,
+		},
+		Image: &binary.Image{},
+	}
+
+	parsed.DynamicMetadata.Relocations = []binary.ELFRelocation{
+		{
+			Offset:     0x5000,
+			Type:       uint32(elf.R_X86_64_JMP_SLOT),
+			SymbolName: "strcpy@GLIBC_2.2.5",
+		},
+	}
+
+	graphs := []cfg.Graph{
+		{
+			Name:    ".plt.sec",
+			Section: 4,
+			Blocks: []cfg.Block{
+				{
+					Start: 0x1000,
+					Instructions: []decoder.Instruction{
+						{
+							Address:  0x1004,
+							Size:     6,
+							Flow:     decoder.FlowJump,
+							Indirect: true,
+							Operands: []decoder.Operand{
+								{
+									Kind: decoder.OperandMemory,
+									Memory: decoder.Memory{
+										Base:         "RIP",
+										Displacement: 0x5000 - 0x100a,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Name:    ".text",
+			Section: 5,
+			Calls: []cfg.CallSite{
+				{
+					Address:   0x2000,
+					Target:    0x1000,
+					HasTarget: true,
+				},
+			},
+		},
+	}
+
+	got := Evaluate(
+		parsed,
+		graphs,
+		dataflow.Result{},
+		security.Result{},
+	)
+
+	finding, exists := byID(
+		got,
+		"API-strcpy-5-2000",
+	)
+
+	if !exists || finding.Severity != "medium" {
+		t.Fatalf(
+			"missing risky PLT call finding: %+v",
+			got,
+		)
 	}
 }

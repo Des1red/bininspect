@@ -257,3 +257,38 @@ func TestPartialRegisterDoesNotFakePointer(t *testing.T) {
 		)
 	}
 }
+
+func TestSignedStackImmediate(t *testing.T) {
+	insts := []decoder.Instruction{
+		instruction(
+			0x1000, 7, "ADD", decoder.FlowNone,
+			reg("RSP"), imm(0xfffffbf0),
+		),
+		instruction(
+			0x1007, 4, "LEA", decoder.FlowNone,
+			reg("RSI"), mem("RSP", 0, 8),
+		),
+		instruction(
+			0x100b, 5, "CALL", decoder.FlowCall,
+		),
+		instruction(
+			0x1010, 1, "RET", decoder.FlowReturn,
+		),
+	}
+
+	got := run(t, binary.ArchX8664, insts)
+
+	if len(got.Calls) != 1 {
+		t.Fatalf("unexpected calls: %+v", got.Calls)
+	}
+
+	v := got.Calls[0].Arguments[1].Value
+
+	if v.Kind != "stack-address" ||
+		v.StackOffset != -1040 {
+		t.Fatalf(
+			"expected entry-SP-1040, got %+v",
+			v,
+		)
+	}
+}

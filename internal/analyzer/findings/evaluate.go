@@ -8,6 +8,7 @@ import (
 
 	"bininspect/internal/analyzer/cfg"
 	"bininspect/internal/analyzer/dataflow"
+	"bininspect/internal/analyzer/resolve"
 	"bininspect/internal/analyzer/security"
 	"bininspect/internal/binary"
 )
@@ -126,6 +127,11 @@ func Evaluate(
 
 	var result []Finding
 	names := functionAddresses(parsed)
+	for address, name := range resolve.PLTTargets(parsed, graphs) {
+		if names[address] == "" {
+			names[address] = name
+		}
+	}
 
 	type location struct {
 		section int

@@ -7,6 +7,7 @@ import (
 
 	"bininspect/internal/analyzer/cfg"
 	"bininspect/internal/analyzer/functions"
+	"bininspect/internal/analyzer/resolve"
 	"bininspect/internal/binary"
 	"bininspect/internal/decoder"
 )
@@ -103,6 +104,11 @@ func Analyze(
 	}
 
 	names := symbolNames(parsed)
+	for address, name := range resolve.PLTTargets(parsed, graphs) {
+		if names[address] == "" {
+			names[address] = name
+		}
+	}
 
 	for _, fn := range funcs {
 		if fn.Graph < 0 || fn.Graph >= len(graphs) {
