@@ -48,18 +48,29 @@ func DataFlow(r analyzer.Result) {
 		return
 	}
 
+	total := len(r.DataFlow.Calls) +
+		len(r.DataFlow.UntracedCalls)
+
 	rows := []string{
 		fmt.Sprintf(
-			"Traced calls: %d",
+			"Decoded call sites accounted for: %d",
+			total,
+		),
+		fmt.Sprintf(
+			"Calls with recovered-function data-flow traces: %d",
 			len(r.DataFlow.Calls),
+		),
+		fmt.Sprintf(
+			"Calls outside recovered-function data flow: %d",
+			len(r.DataFlow.UntracedCalls),
 		),
 		fmt.Sprintf(
 			"Modeled stack-depth observations: %d",
 			len(r.DataFlow.Stack),
 		),
+		"Untraced call references have no inferred argument values.",
 		"Values are abstract facts, not proven runtime values or buffer bounds.",
 	}
-
 	for i, s := range r.DataFlow.Stack {
 		if !fullReport && i >= 8 {
 			rows = append(rows, fmt.Sprintf(
@@ -132,5 +143,30 @@ func DataFlow(r analyzer.Result) {
 		}
 	}
 
+	if len(r.DataFlow.UntracedCalls) > 0 {
+		rows = append(
+			rows,
+			"",
+			"Unattributed call references:",
+		)
+
+		for i, call := range r.DataFlow.UntracedCalls {
+			if !fullReport && i >= 8 {
+				rows = append(rows, fmt.Sprintf(
+					"... %d additional references in saved report",
+					len(r.DataFlow.UntracedCalls)-i,
+				))
+				break
+			}
+
+			rows = append(rows, fmt.Sprintf(
+				"  section %d, %#x -> %s (indirect=%t)",
+				call.Section,
+				call.Address,
+				call.Target,
+				call.Indirect,
+			))
+		}
+	}
 	box("06  DATA-FLOW ANALYSIS", rows...)
 }

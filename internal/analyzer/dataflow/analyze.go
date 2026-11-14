@@ -93,6 +93,11 @@ func Analyze(
 			"register, stack and argument tracking is not implemented for "+
 				string(arch),
 		)
+		out.UntracedCalls = missingCallSites(
+			graphs,
+			nil,
+			symbolNames(parsed),
+		)
 		return out
 	}
 
@@ -284,6 +289,11 @@ func Analyze(
 	}
 
 	out.Calls = mergeCallSites(out.Calls)
+	out.UntracedCalls = missingCallSites(
+		graphs,
+		out.Calls,
+		names,
+	)
 	sort.Slice(out.Calls, func(i, j int) bool {
 		if out.Calls[i].Section != out.Calls[j].Section {
 			return out.Calls[i].Section < out.Calls[j].Section

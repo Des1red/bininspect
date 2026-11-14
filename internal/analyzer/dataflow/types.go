@@ -47,8 +47,18 @@ type StackUse struct {
 }
 
 type Result struct {
-	Supported bool
-	Calls     []CallTrace
-	Stack     []StackUse
-	Warnings  []string
+	Supported     bool
+	Calls         []CallTrace
+	Stack         []StackUse
+	Warnings      []string
+	UntracedCalls []CallReference
+}
+
+// CallReference is a decoded call without a recovered-function
+// data-flow trace. Arguments must not be inferred from this record.
+type CallReference struct {
+	Section  int
+	Address  uint64
+	Target   string
+	Indirect bool
 }
