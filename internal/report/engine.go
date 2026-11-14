@@ -7,34 +7,32 @@ import (
 	"bininspect/internal/analyzer"
 )
 
-func Engine(target string, result analyzer.Result) error {
+func Engine(target string, r analyzer.Result) error {
 	initStyle()
-
 	reportOutput = os.Stdout
 	fullReport = false
 
-	render(target, result)
+	render(target, r)
 
-	filename, err := saveReport(target, result)
+	filename, err := saveReport(target, r)
 	if err != nil {
-		return fmt.Errorf(
-			"saving BinInspect report: %w",
-			err,
-		)
+		return fmt.Errorf("saving Markdown report: %w", err)
 	}
 
-	fmt.Printf("Report saved: %s\n", filename)
+	emitf("Report saved: %s\n", filename)
 	return nil
 }
 
-func render(target string, result analyzer.Result) {
+func render(target string, r analyzer.Result) {
 	header("BININSPECT / STATIC ELF ANALYSIS")
-
 	emitf("Target: %s\n", target)
-	emitf("Format: %s\n", result.Info.Format)
+	emitf("Format: %s\n", r.Info.Format)
 
-	Overview(result)
+	Overview(r)
+	Security(r)
+	Findings(r)
+	Summary(r)
 
 	emitln()
-	emitln(paint(green, "Analysis report complete."))
+	emitln(paint(green, "Analysis complete."))
 }

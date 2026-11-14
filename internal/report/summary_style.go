@@ -3,8 +3,6 @@ package report
 import (
 	"regexp"
 	"strings"
-
-	"bininspect/internal/models"
 )
 
 var summaryTokens = regexp.MustCompile(
@@ -24,31 +22,14 @@ var summaryTokens = regexp.MustCompile(
 		`\b[a-zA-Z_][a-zA-Z_0-9]*\(\)`,
 )
 
-func summaryBox(
-	title string,
-	r models.ResultsModel,
-	rows ...string,
-) {
-	riskyAPIs := make(map[string]bool)
-
-	for _, finding := range r.Findings {
-		if strings.HasPrefix(finding.ID, "API-") {
-			name := strings.ToLower(
-				strings.TrimPrefix(finding.ID, "API-"),
-			)
-
-			riskyAPIs[name] = true
-		}
-	}
-
+func summaryBox(title string, rows ...string) {
 	emitln("┌" + strings.Repeat("─", width) + "┐")
 	boxLine(paint(bold+cyan, title))
 	emitln("├" + strings.Repeat("─", width) + "┤")
 
 	for _, row := range rows {
-		// Wrap plain text first, color it second.
 		for _, line := range wrap(row, width-2) {
-			boxLine(colorSummary(line, riskyAPIs))
+			boxLine(colorSummary(line, nil))
 		}
 	}
 

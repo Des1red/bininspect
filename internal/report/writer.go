@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"bininspect/internal/models"
+	"bininspect/internal/analyzer"
 )
 
 var (
@@ -39,15 +39,18 @@ func reportText(value string, limit int) string {
 
 func saveReport(
 	target string,
-	results models.ResultsModel,
+	result analyzer.Result,
 ) (string, error) {
 	if strings.TrimSpace(target) == "" {
 		return "", fmt.Errorf("empty binary target")
 	}
 
 	base := filepath.Base(filepath.Clean(target))
+
 	if base == "." || base == string(filepath.Separator) {
-		return "", fmt.Errorf("invalid binary target %q", target)
+		return "", fmt.Errorf(
+			"invalid binary target %q", target,
+		)
 	}
 
 	var buffer bytes.Buffer
@@ -56,19 +59,17 @@ func saveReport(
 	oldColors := colors
 	oldFull := fullReport
 
-	func() {
-		defer func() {
-			reportOutput = oldOutput
-			colors = oldColors
-			fullReport = oldFull
-		}()
-
-		reportOutput = &buffer
-		colors = false
-		fullReport = true
-
-		render(results)
+	defer func() {
+		reportOutput = oldOutput
+		colors = oldColors
+		fullReport = oldFull
 	}()
+
+	reportOutput = &buffer
+	colors = false
+	fullReport = true
+
+	render(target, result)
 
 	filename := reportFilename(target)
 
