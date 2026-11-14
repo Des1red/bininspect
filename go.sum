@@ -2,5 +2,9 @@ github.com/Des1red/clihelp v1.0.2 h1:3jE0u7B8y5oGdrUDfj6Vfa4tpmmwFUmSdMMae3ZWloY
 github.com/Des1red/clihelp v1.0.2/go.mod h1:4sMd2I5rpd6Sqb/o9EC4P37OajqkQeZMzxGZ2TIPaTg=
 github.com/Des1red/goinstall v0.0.0-20261007174718-294c4b350a05 h1:i8rrHbVXaelv19+K/kfuvpCNw0V8kJXkhwrow2jVorc=
 github.com/Des1red/goinstall v0.0.0-20261007174718-294c4b350a05/go.mod h1:OJZB4fBTCFol58fG6nrivVbQda5E+OcqDEWOJ1HPCds=
+github.com/loov/disasm v0.1.3 h1:Mj9zS+lPwffrzEvDWIaQ4AtZsW7xMSvXlV7H2wgxbE8=
+github.com/loov/disasm v0.1.3/go.mod h1:WsMfHvJbSGiuZPOicP1ajfU3gHwDYrYjBIO7O8jdHeY=
 github.com/spf13/pflag v1.0.10 h1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=
 github.com/spf13/pflag v1.0.10/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
+golang.org/x/arch v0.32.0 h1:NjGf8/xGf5JgAJ4dw4NtME5R1L7xatagqAg95T3LgII=
+golang.org/x/arch v0.32.0/go.mod h1:KcJSod3cqT2dKcjBxqTyGfbumNikqU9p5tHJinPJnuY=

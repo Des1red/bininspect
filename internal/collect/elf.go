@@ -1,81 +1,44 @@
 package collect
 
 import (
-	"bininspect/internal/models"
 	"fmt"
+	"io"
+
+	"bininspect/internal/analyzer"
+	"bininspect/internal/binary"
+	"bininspect/internal/decoder"
 )
 
-func ELFEngine() error {
-	collectors := []struct {
-		name string
-		run  func() (string, error)
-		dest *string
-	}{
-		{"elf", ELF, &models.Knowledge.ELF},
-		{"programs", Programs, &models.Knowledge.Programs},
-		{"sections", Sections, &models.Knowledge.Sections},
-		{"symbols", Symbols, &models.Knowledge.Symbols},
-		{"dynamic", Dynamic, &models.Knowledge.Dynamic},
-		{"relocs", Relocs, &models.Knowledge.Relocs},
-		{"notes", Notes, &models.Knowledge.Notes},
-		{"security", Security, &models.Knowledge.Security},
-		{"assembly", Assembly, &models.Knowledge.Assembly},
-		{"rawdata", RawData, &models.Knowledge.RawData},
-		{"debug", Debug, &models.Knowledge.Debug},
+// ELFEngine coordinates parsing, decoding, and analysis.
+// The caller owns reader and keeps it open for this call.
+func ELFEngine(
+	reader io.ReaderAt,
+	size uint64,
+) (analyzer.Result, error) {
+	var result analyzer.Result
+
+	parsed, err := binary.Engine(reader, size)
+	if err != nil {
+		return result, fmt.Errorf(
+			"ELF parsing: %w", err,
+		)
 	}
 
-	for _, collector := range collectors {
-		data, err := collector.run()
-		if err != nil {
-			return fmt.Errorf("collect %s: %w", collector.name, err)
-		}
-
-		*collector.dest = data
+	decoded, err := decoder.Engine(parsed)
+	if err != nil {
+		return result, fmt.Errorf(
+			"ELF decoding: %w", err,
+		)
 	}
 
-	return nil
-}
+	result, err = analyzer.AnalyzeELF(
+		parsed, decoded,
+	)
+	if err != nil {
+		return result, fmt.Errorf(
+			"ELF analysis: %w", err,
+		)
+	}
 
-func ELF() (string, error) {
-	return run("readelf", "-h", "-W")
-}
-
-func Programs() (string, error) {
-	return run("readelf", "-l", "-W")
-}
-
-func Sections() (string, error) {
-	return run("readelf", "-S", "-W")
-}
-
-func Symbols() (string, error) {
-	return run("readelf", "-s", "-W")
-}
-
-func Dynamic() (string, error) {
-	return run("readelf", "-d", "-W")
-}
-
-func Relocs() (string, error) {
-	return run("readelf", "-r", "-W")
-}
-
-func Notes() (string, error) {
-	return run("readelf", "-n", "-W")
-}
-
-func Security() (string, error) {
-	return run("readelf", "-l", "-d", "-W")
-}
-
-func Assembly() (string, error) {
-	return run("objdump", "-d", "-M", "intel")
-}
-
-func RawData() (string, error) {
-	return run("objdump", "-s")
-}
-
-func Debug() (string, error) {
-	return run("readelf", "--debug-dump=info", "-W")
+	return result, nil
 }

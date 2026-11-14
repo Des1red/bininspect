@@ -39,13 +39,27 @@ func ParseELFDynamic(
 	if fileSize > math.MaxInt64 {
 		return result, fmt.Errorf("ELF size exceeds reader limit")
 	}
+	bounded := io.NewSectionReader(reader, 0, int64(fileSize))
 
-	file, err := elf.NewFile(
-		io.NewSectionReader(reader, 0, int64(fileSize)),
-	)
+	tables, err := inspectELFTables(bounded, fileSize)
+	if err != nil {
+		return result, fmt.Errorf(
+			"ELF dynamic header tables: %w", err,
+		)
+	}
+
+	file, err := elf.NewFile(bounded)
 	if err != nil {
 		return result, fmt.Errorf(
 			"parsing ELF dynamic headers: %w", err,
+		)
+	}
+
+	if err := appendExtendedELFPrograms(
+		file, bounded, fileSize, tables,
+	); err != nil {
+		return result, fmt.Errorf(
+			"ELF extended dynamic programs: %w", err,
 		)
 	}
 

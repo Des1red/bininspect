@@ -510,8 +510,19 @@ func parseELFRELR(
 	var cursor uint64
 	var haveBase bool
 	var index int
+	maxAddress := uint64(math.MaxUint64)
 
+	if f.Class == elf.ELFCLASS32 {
+		maxAddress = math.MaxUint32
+	}
 	add := func(addr uint64) error {
+		if addr%width != 0 ||
+			addr > maxAddress-(width-1) {
+			return fmt.Errorf(
+				"RELR section %d: invalid address %#x",
+				sectionIndex, addr,
+			)
+		}
 		if f.Type == elf.ET_REL &&
 			(s.Info == 0 ||
 				int(s.Info) >= len(f.Sections) ||

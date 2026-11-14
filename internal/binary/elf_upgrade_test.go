@@ -18,7 +18,7 @@ func TestExtendedProgramHeadersActual(t *testing.T) {
 	const shOff = 0x3c0000
 	const codeOff = 0x400000
 
-	raw := make([]byte, codeOff+4)
+	raw := make([]byte, codeOff+0x200)
 
 	copy(raw[:4], "\x7fELF")
 	raw[4] = 2
@@ -49,9 +49,20 @@ func TestExtendedProgramHeadersActual(t *testing.T) {
 	bo.PutUint32(p[4:], uint32(elf.PF_R|elf.PF_X))
 	bo.PutUint64(p[8:], codeOff)
 	bo.PutUint64(p[16:], 0x400000)
-	bo.PutUint64(p[32:], 4)
-	bo.PutUint64(p[40:], 4)
+	bo.PutUint64(p[32:], 0x200) // p_filesz
+	bo.PutUint64(p[40:], 0x200) // p_memsz
 	bo.PutUint64(p[48:], 1)
+
+	// Put PT_DYNAMIC in the final extended program header.
+	last := raw[phOff+(count-1)*56:]
+
+	bo.PutUint32(last[0:], uint32(elf.PT_DYNAMIC))
+	bo.PutUint32(last[4:], uint32(elf.PF_R))
+	bo.PutUint64(last[8:], codeOff+0x100)
+	bo.PutUint64(last[16:], 0x400100)
+	bo.PutUint64(last[32:], 16)
+	bo.PutUint64(last[40:], 16)
+	bo.PutUint64(last[48:], 8)
 
 	copy(raw[codeOff:], []byte{0x90, 0x90, 0x90, 0xc3})
 
@@ -100,8 +111,71 @@ func TestExtendedProgramHeadersActual(t *testing.T) {
 	if image.Info.Entry != 0x400000 {
 		t.Fatalf("wrong entry: %#x", image.Info.Entry)
 	}
+
+	dynamic, err := ParseELFDynamic(
+		bytes.NewReader(raw),
+		uint64(len(raw)),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !dynamic.Present {
+		t.Fatal("PT_DYNAMIC in final extended header was missed")
+	}
 }
 
+func TestELF32RELRRejectsInvalidAddresses(t *testing.T) {
+	file := &elf.File{
+		FileHeader: elf.FileHeader{
+			Type:      elf.ET_DYN,
+			Class:     elf.ELFCLASS32,
+			ByteOrder: binary.LittleEndian,
+		},
+	}
+
+	section := &elf.Section{
+		SectionHeader: elf.SectionHeader{
+			Entsize: 4,
+		},
+	}
+
+	tests := []struct {
+		name  string
+		words []uint32
+	}{
+		{"overflow", []uint32{0xfffffffc, 3}},
+		{"unaligned", []uint32{2}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := make([]byte, len(tt.words)*4)
+
+			for i, value := range tt.words {
+				binary.LittleEndian.PutUint32(
+					data[i*4:],
+					value,
+				)
+			}
+
+			err := parseELFRELR(
+				&ELFMetadata{},
+				1,
+				section,
+				data,
+				file,
+			)
+
+			if err == nil {
+				t.Fatalf(
+					"accepted invalid ELF32 RELR: %x",
+					data,
+				)
+			}
+		})
+	}
+}
 func TestExtendedSectionHeaderCount(t *testing.T) {
 	const count = 0xff00
 	const offset = 64

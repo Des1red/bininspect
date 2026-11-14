@@ -2,304 +2,156 @@ package report
 
 import (
 	"fmt"
-	"sort"
-	"strings"
 
-	"bininspect/internal/models"
+	"bininspect/internal/analyzer"
 )
 
-func Overview(r models.ResultsModel) {
-	identity(r.Identity)
-	structure(r.Structure)
-	assembly(r.Assembly)
-	functions(r.Functions, r.FunctionDefinitions)
-	sources(r.Sources, r.Identity.Format)
+func Overview(r analyzer.Result) {
+	identity(r)
+	structure(r)
+	assembly(r)
+	controlFlow(r)
+	observations(r)
+	analysisStatus()
 }
 
-func identity(id models.BinaryIdentity) {
+func identity(r analyzer.Result) {
 	box("01  BINARY IDENTITY",
-		"Format:       "+id.Format,
-		"Architecture: "+id.Architecture,
-		"Class:        "+id.Class,
-		"Endianness:   "+id.Endianness,
-		"Type:         "+id.Type,
-		"Entry point:  "+id.EntryPoint,
+		fmt.Sprintf("Format:       %s", r.Info.Format),
+		fmt.Sprintf("Architecture: %s", r.Info.Architecture),
+		fmt.Sprintf("Class:        ELF%d", r.Info.Bits),
+		fmt.Sprintf("Endianness:   %s", r.Info.Endianness),
+		fmt.Sprintf("ELF type:     %s", r.ELFType),
+		fmt.Sprintf("Entry point:  %#x", r.Info.Entry),
 	)
 }
 
-func structure(s models.BinaryStructure) {
-	rows := []string{
-		fmt.Sprintf("Sections:      %d", len(s.Sections)),
-		fmt.Sprintf("Segments:      %d", len(s.Segments)),
-		fmt.Sprintf("Symbols:       %d", len(s.Symbols)),
-		fmt.Sprintf("Relocations:   %d", s.Relocations),
-		fmt.Sprintf("Libraries:     %d", len(s.Libraries)),
-		fmt.Sprintf("Debug info:    %t", s.DebugInfo),
-	}
+func structure(r analyzer.Result) {
+	s := r.Structure
 
-	if len(s.Libraries) > 0 {
-		rows = append(rows, "", "Dependencies:")
-
-		for i, library := range s.Libraries {
-			if !fullReport && i == 5 {
-				rows = append(rows,
-					fmt.Sprintf("... and %d more", len(s.Libraries)-i))
-				break
-			}
-
-			rows = append(rows, "  "+reportText(library, 65))
-		}
-	}
-
-	box("02  BINARY STRUCTURE", rows...)
-}
-
-func assembly(a models.AssemblyAnalysis) {
-	rows := []string{
-		fmt.Sprintf("Instructions:  %d", len(a.Instructions)),
-		fmt.Sprintf("Calls:         %d", a.Calls),
-		fmt.Sprintf("Branches:      %d", a.Branches),
-		fmt.Sprintf("Returns:       %d", a.Returns),
-		fmt.Sprintf("Stack changes: %d", len(a.StackAllocations)),
-	}
-
-	if len(a.StackAllocations) > 0 {
-		rows = append(rows, "", "Stack allocations:")
-
-		for i, allocation := range a.StackAllocations {
-			if !fullReport && i == 5 {
-				rows = append(rows,
-					fmt.Sprintf("... and %d more",
-						len(a.StackAllocations)-i))
-				break
-			}
-
-			rows = append(rows, fmt.Sprintf(
-				"  0x%s  %d bytes  %s",
-				allocation.Address,
-				allocation.Size,
-				reportText(allocation.Function, 28),
-			))
-		}
-	}
-	if len(a.StackRelations) > 0 {
-		rows = append(rows, "", "Potential stack relationships:")
-
-		for i, relation := range a.StackRelations {
-			if i == 3 {
-				rows = append(rows, fmt.Sprintf(
-					"... and %d more",
-					len(a.StackRelations)-i,
-				))
-				break
-			}
-
-			rows = append(rows,
-				fmt.Sprintf(
-					"  %s: %s()",
-					relation.Function,
-					relation.API,
-				),
-				fmt.Sprintf(
-					"  %s -> %s",
-					relation.InputReference,
-					relation.CheckedReference,
-				),
-				fmt.Sprintf(
-					"  Separation: %d bytes",
-					relation.Distance,
-				),
-				fmt.Sprintf(
-					"  Checked by branch: 0x%s",
-					relation.BranchSite,
-				),
-			)
-		}
-	}
-	if len(a.CallFlows) > 0 {
-		rows = append(rows, "", "Tracked API arguments:")
-
-		for i, call := range a.CallFlows {
-			if i >= 4 {
-				rows = append(rows, fmt.Sprintf(
-					"... and %d more",
-					len(a.CallFlows)-i,
-				))
-				break
-			}
-
-			rows = append(rows, fmt.Sprintf(
-				"  %s() at 0x%s",
-				call.API,
-				call.Address,
-			))
-
-			for _, arg := range call.Arguments {
-				rows = append(rows, fmt.Sprintf(
-					"    Arg %d (%s): %s",
-					arg.Position,
-					arg.Location,
-					reportText(arg.Expression, 42),
-				))
-			}
-		}
-	}
-	box("03  ASSEMBLY ANALYSIS", rows...)
-}
-
-func functions(
-	calls []models.FunctionCall,
-	definitions []models.FunctionInfo,
-) {
-	rows := []string{
-		fmt.Sprintf("Functions discovered: %d", len(definitions)),
-		fmt.Sprintf("Call sites:           %d", len(calls)),
-	}
-
-	uniqueCalls := make(map[string]int)
-	unresolved := 0
-
-	for _, call := range calls {
-		if call.Indirect || call.Name == "" {
-			unresolved++
-			continue
-		}
-
-		uniqueCalls[call.Name]++
-	}
-
-	rows = append(rows,
-		fmt.Sprintf("Unique callees:      %d", len(uniqueCalls)),
-		fmt.Sprintf("Unresolved calls:    %d", unresolved),
+	box("02  ELF STRUCTURE",
+		fmt.Sprintf("Program headers:        %d", s.Programs),
+		fmt.Sprintf("Section headers:        %d", s.Sections),
+		fmt.Sprintf("Section symbols:        %d", s.Symbols),
+		fmt.Sprintf("Dynamic symbols:        %d", s.DynamicSymbols),
+		fmt.Sprintf("Section relocations:    %d", s.Relocations),
+		fmt.Sprintf("Dynamic relocations:    %d", s.DynamicRelocations),
+		fmt.Sprintf("Dynamic dependencies:   %d", s.Dependencies),
+		"Note: symbol and relocation sources may overlap.",
 	)
+}
 
-	type entry struct {
-		name  string
-		count int
+func assembly(r analyzer.Result) {
+	a := r.Assembly
+
+	box("03  INSTRUCTION DECODING",
+		fmt.Sprintf("Candidate instructions: %d", a.CandidateInstructions),
+		fmt.Sprintf("Calls:                  %d", a.Calls),
+		fmt.Sprintf("Jumps:                  %d", a.Jumps),
+		fmt.Sprintf("Conditional branches:   %d", a.ConditionalBranches),
+		fmt.Sprintf("Returns:                %d", a.Returns),
+		fmt.Sprintf("System instructions:    %d", a.SystemInstructions),
+		fmt.Sprintf("Traps:                  %d", a.Traps),
+		fmt.Sprintf("Undecodable bytes:      %d", a.SkippedBytes),
+		fmt.Sprintf("Recognized data bytes:  %d", a.SkippedDataBytes),
+	)
+}
+
+func controlFlow(r analyzer.Result) {
+	blocks, edges, calls := 0, 0, 0
+
+	for _, graph := range r.Graphs {
+		blocks += len(graph.Blocks)
+		edges += len(graph.Edges)
+		calls += len(graph.Calls)
 	}
 
-	var entries []entry
-
-	for name, count := range uniqueCalls {
-		entries = append(entries, entry{name, count})
+	rows := []string{
+		fmt.Sprintf("Executable regions:  %d", len(r.Graphs)),
+		fmt.Sprintf("Candidate blocks:    %d", blocks),
+		fmt.Sprintf("CFG edges:           %d", edges),
+		fmt.Sprintf("Recorded call sites: %d", calls),
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].count == entries[j].count {
-			return entries[i].name < entries[j].name
-		}
-		return entries[i].count > entries[j].count
-	})
-
-	if len(entries) > 0 {
-		rows = append(rows, "", "Most referenced functions:")
+	if len(r.Graphs) > 0 {
+		rows = append(rows, "", "Per-region breakdown:")
 	}
 
-	for i, item := range entries {
-		if !fullReport && i == 8 {
+	for i, graph := range r.Graphs {
+		if !fullReport && i >= 8 {
 			rows = append(rows, fmt.Sprintf(
-				"... and %d more", len(entries)-i,
+				"... %d more regions in saved report",
+				len(r.Graphs)-i,
 			))
 			break
 		}
 
 		rows = append(rows, fmt.Sprintf(
-			"  %-40s %d calls",
-			reportText(item.name, 40),
-			item.count,
+			"  [%d] %s: %d blocks, %d edges, %d calls",
+			graph.Section,
+			reportText(graph.Name, 24),
+			len(graph.Blocks),
+			len(graph.Edges),
+			len(graph.Calls),
 		))
 	}
 
-	box("04  FUNCTION ANALYSIS", rows...)
+	box("04  CONTROL-FLOW CANDIDATES", rows...)
 }
 
-func sources(
-	collected map[string]models.SourceSummary,
-	format string,
-) {
-	applicable := []string{"file", "strings"}
-
-	switch format {
-	case "ELF":
-		applicable = append(applicable,
-			"elf", "programs", "sections", "symbols",
-			"dynamic", "relocs", "notes", "security",
-			"assembly", "rawdata", "debug",
-		)
-
-	case "PE":
-		applicable = append(applicable,
-			"pe", "sections", "symbols", "dynamic",
-			"relocs", "assembly", "rawdata",
-		)
-
-	case "Mach-O":
-		applicable = append(applicable,
-			"macho", "programs", "sections", "symbols",
-			"dynamic", "relocs", "security",
-			"assembly", "rawdata", "debug",
-		)
-
-	default:
-		applicable = append(applicable,
-			"unknown", "rawdata",
-		)
-	}
-
-	optional := map[string]bool{
-		"debug":   true,
-		"notes":   true,
-		"symbols": true,
-		"dynamic": true,
-		"relocs":  true,
-	}
-
-	if format == "Mach-O" {
-		optional["assembly"] = true
-	}
-
-	available := 0
-	var missing, absent []string
-
-	for _, name := range applicable {
-		if collected[name].Available {
-			available++
-			continue
-		}
-
-		if optional[name] {
-			absent = append(absent, name)
-		} else {
-			missing = append(missing, name)
-		}
-	}
-
+func observations(r analyzer.Result) {
 	rows := []string{
-		fmt.Sprintf(
-			"Available:       %d/%d applicable datasets",
-			available, len(applicable),
-		),
-		fmt.Sprintf(
-			"Not applicable:  %d format-specific datasets",
-			len(collected)-len(applicable),
-		),
+		fmt.Sprintf("Decode diagnostics: %d", len(r.Diagnostics)),
+		fmt.Sprintf("Parser warnings:    %d", len(r.Warnings)),
 	}
 
-	if len(missing) > 0 {
-		rows = append(rows,
-			"",
-			"Unavailable or empty:",
-			"  "+strings.Join(missing, ", "),
-		)
+	if len(r.Diagnostics) > 0 {
+		rows = append(rows, "", "Decode diagnostics:")
+
+		for i, d := range r.Diagnostics {
+			if !fullReport && i >= 8 {
+				rows = append(rows, fmt.Sprintf(
+					"... %d more diagnostics in saved report",
+					len(r.Diagnostics)-i,
+				))
+				break
+			}
+
+			rows = append(rows, fmt.Sprintf(
+				"  section %d at %#x (%d bytes): %s",
+				d.Section,
+				d.Address,
+				d.Size,
+				reportText(d.Reason, 100),
+			))
+		}
 	}
 
-	if len(absent) > 0 {
-		rows = append(rows,
-			"",
-			"Optional data absent:",
-			"  "+strings.Join(absent, ", "),
-		)
+	if len(r.Warnings) > 0 {
+		rows = append(rows, "", "ELF validation warnings:")
+
+		for i, warning := range r.Warnings {
+			if !fullReport && i >= 8 {
+				rows = append(rows, fmt.Sprintf(
+					"... %d more warnings in saved report",
+					len(r.Warnings)-i,
+				))
+				break
+			}
+
+			rows = append(rows,
+				"  "+reportText(warning, 120),
+			)
+		}
 	}
 
-	box("05  COLLECTION COVERAGE", rows...)
+	box("05  DIAGNOSTICS AND WARNINGS", rows...)
+}
+
+func analysisStatus() {
+	box("06  ANALYSIS COVERAGE",
+		"Available: ELF identity and structure, decoded instruction candidates, basic-block graphs, and diagnostic evidence.",
+		"Not yet implemented: function recovery, interprocedural call graphs, register/stack data flow, security-protection evaluation, and vulnerability findings.",
+		"A linear-sweep instruction candidate is not necessarily reachable executable code. No security conclusion is drawn from analyses that have not run.",
+	)
 }
