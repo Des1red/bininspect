@@ -29,6 +29,8 @@ func render(target string, r analyzer.Result) {
 	emitf("Format: %s\n", r.Info.Format)
 
 	Overview(r)
+	Recovery(r)
+	DataFlow(r)
 	Security(r)
 	Findings(r)
 	Summary(r)

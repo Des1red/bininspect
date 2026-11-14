@@ -79,7 +79,7 @@ func TestFullReport(t *testing.T) {
 		t.Fatal("full report contains ANSI colors")
 	}
 
-	if !strings.Contains(output, "Not evaluated") {
-		t.Fatal("report falsely implies security evaluation occurred")
+	if !strings.Contains(output, "NO OBSERVED FINDINGS") {
+		t.Fatal("report omitted the no-findings status")
 	}
 }

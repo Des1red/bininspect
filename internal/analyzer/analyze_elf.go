@@ -5,6 +5,10 @@ import (
 	"fmt"
 
 	"bininspect/internal/analyzer/cfg"
+	"bininspect/internal/analyzer/dataflow"
+	"bininspect/internal/analyzer/findings"
+	"bininspect/internal/analyzer/functions"
+	"bininspect/internal/analyzer/security"
 	"bininspect/internal/binary"
 	"bininspect/internal/decoder"
 )
@@ -36,7 +40,10 @@ func AnalyzeELF(
 		)
 	}
 
-	graphs, err := cfg.Build(decoded)
+	graphs, err := cfg.BuildWithLeaders(
+		decoded,
+		functions.Leaders(parsed, decoded),
+	)
 	if err != nil {
 		return result, err
 	}
@@ -101,6 +108,27 @@ func AnalyzeELF(
 			}
 		}
 	}
+
+	result.Functions = functions.Recover(
+		parsed,
+		result.Graphs,
+	)
+	result.DataFlow = dataflow.Analyze(
+		parsed,
+		result.Graphs,
+		result.Functions,
+	)
+	result.Security = security.Analyze(parsed)
+	result.Warnings = append(
+		result.Warnings,
+		result.DataFlow.Warnings...,
+	)
+	result.Findings = findings.Evaluate(
+		parsed,
+		result.Graphs,
+		result.DataFlow,
+		result.Security,
+	)
 
 	return result, nil
 }

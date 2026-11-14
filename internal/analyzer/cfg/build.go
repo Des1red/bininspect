@@ -9,10 +9,17 @@ import (
 )
 
 func Build(decoded decoder.Result) ([]Graph, error) {
+	return BuildWithLeaders(decoded, nil)
+}
+
+func BuildWithLeaders(
+	decoded decoder.Result,
+	extra map[int]map[uint64]bool,
+) ([]Graph, error) {
 	graphs := make([]Graph, 0, len(decoded.Sections))
 
-	for _, section := range decoded.Sections {
-		graph, err := buildSection(section)
+	for i, section := range decoded.Sections {
+		graph, err := buildSection(section, extra[i])
 		if err != nil {
 			return nil, fmt.Errorf(
 				"CFG section %d (%s): %w",
@@ -26,7 +33,10 @@ func Build(decoded decoder.Result) ([]Graph, error) {
 	return graphs, nil
 }
 
-func buildSection(section decoder.DecodedSection) (Graph, error) {
+func buildSection(
+	section decoder.DecodedSection,
+	extra map[uint64]bool,
+) (Graph, error) {
 	graph := Graph{
 		Section: section.Index,
 		Name:    section.Name,
@@ -70,7 +80,11 @@ func buildSection(section decoder.DecodedSection) (Graph, error) {
 	leaders := map[uint64]bool{
 		insts[0].Address: true,
 	}
-
+	for address := range extra {
+		if _, ok := starts[address]; ok {
+			leaders[address] = true
+		}
+	}
 	for i, inst := range insts {
 		// Never create fallthrough across undecoded bytes.
 		if i > 0 &&

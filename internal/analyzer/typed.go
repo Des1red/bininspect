@@ -4,6 +4,10 @@ import (
 	"debug/elf"
 
 	"bininspect/internal/analyzer/cfg"
+	"bininspect/internal/analyzer/dataflow"
+	"bininspect/internal/analyzer/findings"
+	"bininspect/internal/analyzer/functions"
+	"bininspect/internal/analyzer/security"
 	"bininspect/internal/binary"
 	"bininspect/internal/decoder"
 )
@@ -38,4 +42,8 @@ type Result struct {
 	Graphs      []cfg.Graph
 	Diagnostics []decoder.Diagnostic
 	Warnings    []string
+	Functions   []functions.Function
+	DataFlow    dataflow.Result
+	Security    security.Result
+	Findings    []findings.Finding
 }
