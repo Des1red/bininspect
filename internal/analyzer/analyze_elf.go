@@ -8,6 +8,7 @@ import (
 	"bininspect/internal/analyzer/dataflow"
 	"bininspect/internal/analyzer/findings"
 	"bininspect/internal/analyzer/functions"
+	"bininspect/internal/analyzer/resolve"
 	"bininspect/internal/analyzer/security"
 	"bininspect/internal/binary"
 	"bininspect/internal/decoder"
@@ -40,12 +41,31 @@ func AnalyzeELF(
 		)
 	}
 
-	graphs, err := cfg.BuildWithLeaders(
-		decoded,
-		functions.Leaders(parsed, decoded),
-	)
+	leaders := functions.Leaders(parsed, decoded)
+
+	// First pass: existing CFG, used to validate
+	// jump-table producer reachability.
+	graphs, err := cfg.BuildWithLeaders(decoded, leaders)
 	if err != nil {
+		// Keep your existing CFG-build error handling here.
 		return result, err
+	}
+
+	// Find strongly supported indirect jump targets.
+	tables := resolve.JumpTables(parsed, decoded, graphs)
+
+	if len(tables) != 0 {
+		// Jump-table destinations may begin inside existing
+		// basic blocks, so rebuild with additional leaders.
+		resolve.AddJumpTableLeaders(leaders, decoded, tables)
+
+		graphs, err = cfg.BuildWithLeaders(decoded, leaders)
+		if err != nil {
+			// Keep your existing CFG-build error handling here.
+			return result, err
+		}
+
+		resolve.AddJumpTableEdges(graphs, tables)
 	}
 
 	result = Result{
