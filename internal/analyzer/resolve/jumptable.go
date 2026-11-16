@@ -173,36 +173,287 @@ func dominatesDispatch(
 	)
 }
 
-func writesTableBase(inst decoder.Instruction) bool {
-	if len(inst.Operands) == 0 {
+func x64RegisterFamily(name string) string {
+	switch name {
+	case "RAX", "EAX", "AX", "AL", "AH":
+		return "RAX"
+	case "RBX", "EBX", "BX", "BL", "BH":
+		return "RBX"
+	case "RCX", "ECX", "CX", "CL", "CH":
+		return "RCX"
+	case "RDX", "EDX", "DX", "DL", "DH":
+		return "RDX"
+	case "RDI", "EDI", "DI", "DIL":
+		return "RDI"
+	case "RSI", "ESI", "SI", "SIL":
+		return "RSI"
+	case "RBP", "EBP", "BP", "BPL":
+		return "RBP"
+	case "RSP", "ESP", "SP", "SPL":
+		return "RSP"
+	case "R8", "R8D", "R8W", "R8B":
+		return "R8"
+	case "R9", "R9D", "R9W", "R9B":
+		return "R9"
+	case "R10", "R10D", "R10W", "R10B":
+		return "R10"
+	case "R11", "R11D", "R11W", "R11B":
+		return "R11"
+	case "R12", "R12D", "R12W", "R12B":
+		return "R12"
+	case "R13", "R13D", "R13W", "R13B":
+		return "R13"
+	case "R14", "R14D", "R14W", "R14B":
+		return "R14"
+	case "R15", "R15D", "R15W", "R15B":
+		return "R15"
+	}
+	return name
+}
+
+func changesRegister(
+	inst decoder.Instruction,
+	fullName string,
+) bool {
+	if len(inst.Operands) == 0 ||
+		inst.Operands[0].Kind != decoder.OperandRegister {
 		return false
 	}
 
-	// Conservative rejection: even read-only instructions
-	// with RBX as the first operand may be rejected.
-	first := inst.Operands[0]
+	switch inst.Mnemonic {
+	case "CMP", "TEST", "PUSH", "NOP":
+		return false
+	}
 
-	for _, name := range []string{
-		"RBX", "EBX", "BX", "BL", "BH",
-	} {
-		if register(first, name) {
+	return x64RegisterFamily(
+		inst.Operands[0].Register,
+	) == fullName
+}
+
+func ripMemoryAddress(
+	inst decoder.Instruction,
+	operand decoder.Operand,
+) (uint64, bool) {
+	if operand.Kind != decoder.OperandMemory ||
+		operand.Memory.Base != "RIP" ||
+		operand.Memory.Index != "" {
+		return 0, false
+	}
+
+	if inst.Address > math.MaxUint64-uint64(inst.Size) {
+		return 0, false
+	}
+
+	return relativeAddress(
+		inst.Address+uint64(inst.Size),
+		operand.Memory.Displacement,
+	)
+}
+
+// Check whether the value compared by CMP is also the
+// index used by the jump-table MOVSXD.
+//
+// Supported:
+//  1. CMP EAX / RBX / ... followed by the same index.
+//  2. CMP CL followed by MOVZX EDX, CL.
+//  3. CMP [RIP+disp] followed by MOV EAX from that
+//     same RIP-relative memory address.
+//
+// Cases with unsupported register transformations
+// remain unresolved.
+func indexMatchesGuard(
+	cmp decoder.Instruction,
+	middle []decoder.Instruction,
+	indexRegister string,
+) bool {
+	if len(cmp.Operands) != 2 {
+		return false
+	}
+
+	compared := cmp.Operands[0]
+	lastWrite := -1
+
+	for i, inst := range middle {
+		if changesRegister(inst, indexRegister) {
+			lastWrite = i
+		}
+	}
+
+	if compared.Kind == decoder.OperandRegister {
+		// Direct comparison of the index register.
+		if lastWrite == -1 &&
+			x64RegisterFamily(compared.Register) ==
+				indexRegister {
 			return true
 		}
+
+		if lastWrite < 0 {
+			return false
+		}
+
+		// A zero-extended copy from a compared byte
+		// register, e.g. CMP CL followed by
+		// MOVZX EDX, CL.
+		inst := middle[lastWrite]
+
+		if inst.Mnemonic != "MOVZX" ||
+			len(inst.Operands) != 2 ||
+			inst.Operands[1].Kind !=
+				decoder.OperandRegister ||
+			inst.Operands[1].Register !=
+				compared.Register {
+			return false
+		}
+
+		guardedFamily := x64RegisterFamily(
+			compared.Register,
+		)
+
+		for _, prior := range middle[:lastWrite] {
+			if changesRegister(prior, guardedFamily) {
+				return false
+			}
+		}
+
+		return true
+	}
+
+	if compared.Kind == decoder.OperandMemory {
+		if lastWrite < 0 {
+			return false
+		}
+
+		// A checked RIP-relative global subsequently
+		// loaded into the index register.
+		inst := middle[lastWrite]
+
+		if inst.Mnemonic != "MOV" ||
+			len(inst.Operands) != 2 ||
+			inst.Operands[1].Kind !=
+				decoder.OperandMemory {
+			return false
+		}
+
+		before, okBefore := ripMemoryAddress(
+			cmp, compared,
+		)
+
+		after, okAfter := ripMemoryAddress(
+			inst, inst.Operands[1],
+		)
+
+		if !okBefore ||
+			!okAfter ||
+			before != after ||
+			compared.Memory.SizeBytes != 4 ||
+			inst.Operands[1].Memory.SizeBytes != 4 {
+			return false
+		}
+
+		// Reject explicit RIP-relative writes to the
+		// compared location between CMP and reload.
+		for _, prior := range middle[:lastWrite] {
+			if len(prior.Operands) == 0 ||
+				prior.Operands[0].Kind !=
+					decoder.OperandMemory {
+				continue
+			}
+
+			address, ok := ripMemoryAddress(
+				prior,
+				prior.Operands[0],
+			)
+
+			if ok && address == before {
+				return false
+			}
+		}
+
+		return true
 	}
 
 	return false
 }
 
-// JumpTables recognizes the guarded x86-64 pattern:
+// Find a nearby CMP + unsigned JA guard.
 //
-//	CMP EAX, max
-//	JA outside
-//	MOVSXD RAX, DWORD [RBX + RAX*4]
-//	ADD RAX, RBX
-//	JMP RAX
+// Ordinary instructions, including an intervening LEA
+// and MOVZX, are allowed between JA and MOVSXD.
+// Any intervening control transfer is rejected.
+func guardedTableCount(
+	insts []decoder.Instruction,
+	loadIndex int,
+	indexRegister string,
+) (uint64, uint64, bool) {
+	if loadIndex <= 1 {
+		return 0, 0, false
+	}
+
+	load := insts[loadIndex]
+
+	for g := loadIndex - 1; g >= 1; g-- {
+		instruction := insts[g]
+
+		if load.Address < instruction.Address ||
+			load.Address-instruction.Address > 128 {
+			break
+		}
+
+		if !adjacent(instruction, insts[g+1]) {
+			break
+		}
+
+		if instruction.Flow == decoder.FlowNone {
+			continue
+		}
+
+		if instruction.Mnemonic != "JA" ||
+			!instruction.HasTarget ||
+			instruction.Indirect {
+			break
+		}
+
+		cmp := insts[g-1]
+
+		if !adjacent(cmp, instruction) ||
+			cmp.Mnemonic != "CMP" ||
+			len(cmp.Operands) != 2 ||
+			cmp.Operands[1].Kind !=
+				decoder.OperandImmediate {
+			break
+		}
+
+		upper := cmp.Operands[1].Immediate
+
+		if upper < 0 ||
+			upper > 4095 ||
+			!indexMatchesGuard(
+				cmp,
+				insts[g+1:loadIndex],
+				indexRegister,
+			) {
+			break
+		}
+
+		return cmp.Address, uint64(upper) + 1, true
+	}
+
+	return 0, 0, false
+}
+
+// JumpTables recognizes guarded x86-64 relative-offset
+// dispatches:
 //
-// RBX must come from a dominating RIP-relative LEA.
-// Unsupported or ambiguous cases stay unresolved.
+//	CMP checked-index, maximum
+//	JA  out-of-range
+//	[optional instructions]
+//	MOVSXD destination, DWORD [base+index*4]
+//	ADD destination, base
+//	JMP destination
+//
+// The base must originate from a dominating
+// RIP-relative LEA. Every table target must resolve
+// to a decoded instruction start inside one FDE.
 func JumpTables(
 	parsed *binary.ELFResult,
 	decoded decoder.Result,
@@ -233,56 +484,36 @@ func JumpTables(
 		}
 
 		insts := section.Instructions
+
 		starts := make(map[uint64]bool, len(insts))
 
 		for _, inst := range insts {
 			starts[inst.Address] = true
 		}
 
-		for i := 4; i < len(insts); i++ {
-			cmp := insts[i-4]
-			guard := insts[i-3]
+		for i := 2; i < len(insts); i++ {
 			load := insts[i-2]
 			add := insts[i-1]
 			jump := insts[i]
 
-			if !adjacent(cmp, guard) ||
-				!adjacent(guard, load) ||
-				!adjacent(load, add) ||
-				!adjacent(add, jump) {
-				continue
-			}
-
-			if cmp.Mnemonic != "CMP" ||
-				len(cmp.Operands) != 2 ||
-				!register(cmp.Operands[0], "EAX") ||
-				cmp.Operands[1].Kind != decoder.OperandImmediate {
-				continue
-			}
-
-			maxIndex := cmp.Operands[1].Immediate
-
-			if maxIndex < 0 || maxIndex > 4095 {
-				continue
-			}
-
-			if guard.Mnemonic != "JA" ||
-				len(guard.Operands) != 1 ||
-				!guard.Operands[0].HasTarget {
-				continue
-			}
-
-			if load.Mnemonic != "MOVSXD" ||
+			if !adjacent(load, add) ||
+				!adjacent(add, jump) ||
+				load.Mnemonic != "MOVSXD" ||
 				len(load.Operands) != 2 ||
-				!register(load.Operands[0], "RAX") ||
-				load.Operands[1].Kind != decoder.OperandMemory {
+				load.Operands[0].Kind !=
+					decoder.OperandRegister ||
+				load.Operands[1].Kind !=
+					decoder.OperandMemory {
 				continue
 			}
 
 			mem := load.Operands[1].Memory
+			destination := load.Operands[0].Register
 
-			if mem.Base != "RBX" ||
-				mem.Index != "RAX" ||
+			if mem.Base == "" ||
+				mem.Index == "" ||
+				mem.Base == "RIP" ||
+				mem.Base == destination ||
 				mem.Scale != 4 ||
 				mem.SizeBytes != 4 ||
 				mem.Displacement != 0 {
@@ -291,26 +522,37 @@ func JumpTables(
 
 			if add.Mnemonic != "ADD" ||
 				len(add.Operands) != 2 ||
-				!register(add.Operands[0], "RAX") ||
-				!register(add.Operands[1], "RBX") {
+				!register(add.Operands[0], destination) ||
+				!register(add.Operands[1], mem.Base) {
 				continue
 			}
 
 			if jump.Mnemonic != "JMP" ||
 				!jump.Indirect ||
 				len(jump.Operands) != 1 ||
-				!register(jump.Operands[0], "RAX") {
+				!register(jump.Operands[0], destination) {
 				continue
 			}
 
-			// Require an accepted unwind range containing
-			// the entire dispatch sequence.
+			guardAddress, entryCount, ok :=
+				guardedTableCount(
+					insts,
+					i-2,
+					x64RegisterFamily(mem.Index),
+				)
+
+			if !ok {
+				continue
+			}
+
+			// The guard and dispatch must fall inside
+			// the same unwind range.
 			var frame *functions.UnwindRange
 
 			for fi := range frames {
 				r := &frames[fi]
 
-				if cmp.Address >= r.Start &&
+				if guardAddress >= r.Start &&
 					jump.Address < r.End {
 					frame = r
 					break
@@ -321,30 +563,45 @@ func JumpTables(
 				continue
 			}
 
-			// Locate the nearest RIP-relative LEA RBX
-			// inside this function, with a bounded search.
+			// The initial CFG must establish that the
+			// bounds check dominates this dispatch.
+			if !dominatesDispatch(
+				*graph,
+				frame.Start,
+				guardAddress,
+				jump.Address,
+			) {
+				continue
+			}
+
+			// Find the RIP-relative LEA that establishes
+			// the table base register.
 			leaIndex := -1
 
-			for p := i - 5; p >= 0; p-- {
+			for p := i - 3; p >= 0; p-- {
 				candidate := insts[p]
 
 				if candidate.Address < frame.Start ||
-					jump.Address-candidate.Address > 4096 {
+					load.Address < candidate.Address ||
+					load.Address-candidate.Address > 4096 {
 					break
 				}
 
-				if candidate.Mnemonic != "LEA" ||
-					len(candidate.Operands) != 2 ||
-					!register(candidate.Operands[0], "RBX") ||
-					candidate.Operands[1].Kind !=
-						decoder.OperandMemory ||
-					candidate.Operands[1].Memory.Base != "RIP" ||
-					candidate.Operands[1].Memory.Index != "" {
-					continue
+				if candidate.Mnemonic == "LEA" &&
+					len(candidate.Operands) == 2 &&
+					register(
+						candidate.Operands[0],
+						mem.Base,
+					) &&
+					candidate.Operands[1].Kind ==
+						decoder.OperandMemory &&
+					candidate.Operands[1].Memory.Base ==
+						"RIP" &&
+					candidate.Operands[1].Memory.Index ==
+						"" {
+					leaIndex = p
+					break
 				}
-
-				leaIndex = p
-				break
 			}
 
 			if leaIndex < 0 {
@@ -353,40 +610,44 @@ func JumpTables(
 
 			lea := insts[leaIndex]
 
-			// Reject if the linear instruction span
-			// contains another possible RBX write.
+			// Reject a possible overwrite of the
+			// base register before table lookup.
 			safe := true
 
-			for p := leaIndex + 1; p < i; p++ {
-				if writesTableBase(insts[p]) {
+			for p := leaIndex + 1; p < i-2; p++ {
+				if changesRegister(
+					insts[p],
+					mem.Base,
+				) {
 					safe = false
 					break
 				}
 			}
 
-			if !safe || !dominatesDispatch(
-				*graph,
-				frame.Start,
-				lea.Address,
-				jump.Address,
-			) {
+			if !safe ||
+				!dominatesDispatch(
+					*graph,
+					frame.Start,
+					lea.Address,
+					jump.Address,
+				) {
 				continue
 			}
 
-			base, ok := relativeAddress(
-				lea.Address+uint64(lea.Size),
-				lea.Operands[1].Memory.Displacement,
+			base, ok := ripMemoryAddress(
+				lea,
+				lea.Operands[1],
 			)
+
 			if !ok {
 				continue
 			}
-
-			entryCount := uint64(maxIndex) + 1
 
 			raw, err := parsed.Image.ReadVirtual(
 				base,
 				entryCount*4,
 			)
+
 			if err != nil {
 				continue
 			}
