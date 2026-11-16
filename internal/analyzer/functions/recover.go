@@ -103,6 +103,15 @@ func Leaders(
 			add(i, frame.End)
 		}
 	}
+	// ELF runtime initialization and finalization entries
+	// provide additional function-entry evidence.
+	for _, entry := range RuntimeArrayEntries(parsed) {
+		address := entry.Address &^ thumbBit(parsed)
+
+		for i := range decoded.Sections {
+			add(i, address)
+		}
+	}
 	for _, sym := range symbols(parsed) {
 		if sym.Type != elf.STT_FUNC ||
 			sym.SectionIndex == uint32(elf.SHN_UNDEF) {
@@ -136,6 +145,7 @@ func Recover(
 
 	var result []Function
 	unwind := UnwindRanges(parsed)
+	runtimeEntries := RuntimeArrayEntries(parsed)
 
 	for gi, graph := range graphs {
 		byStart := make(map[uint64]int)
@@ -162,8 +172,11 @@ func Recover(
 		seeds := make(map[uint64]seed)
 
 		priority := map[string]int{
-			"symbol":          5,
-			"entry":           4,
+			"symbol":          6,
+			"entry":           5,
+			"preinit-array":   4,
+			"init-array":      4,
+			"fini-array":      4,
 			"eh-frame":        3,
 			"call":            2,
 			"region-fallback": 1,
@@ -221,7 +234,13 @@ func Recover(
 		for start := range fdeEnds {
 			put(start, "", "eh-frame")
 		}
-
+		for _, entry := range runtimeEntries {
+			put(
+				entry.Address&^thumbBit(parsed),
+				"",
+				entry.Source,
+			)
+		}
 		// Direct calls remain useful when unwind evidence
 		// is absent. A call into an FDE's interior is not
 		// automatically a separate function boundary.
