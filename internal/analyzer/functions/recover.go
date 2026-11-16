@@ -97,6 +97,12 @@ func Leaders(
 		}
 	}
 
+	for _, frame := range UnwindRanges(parsed) {
+		for i := range decoded.Sections {
+			add(i, frame.Start)
+			add(i, frame.End)
+		}
+	}
 	for _, sym := range symbols(parsed) {
 		if sym.Type != elf.STT_FUNC ||
 			sym.SectionIndex == uint32(elf.SHN_UNDEF) {
@@ -129,6 +135,7 @@ func Recover(
 	}
 
 	var result []Function
+	unwind := UnwindRanges(parsed)
 
 	for gi, graph := range graphs {
 		byStart := make(map[uint64]int)
@@ -141,19 +148,35 @@ func Recover(
 			continue
 		}
 
+		fdeEnds := frameBounds(graph, unwind)
+
+		insideFrame := func(addr uint64) bool {
+			for begin, end := range fdeEnds {
+				if addr > begin && addr < end {
+					return true
+				}
+			}
+			return false
+		}
+
 		seeds := make(map[uint64]seed)
 
+		priority := map[string]int{
+			"symbol":          5,
+			"entry":           4,
+			"eh-frame":        3,
+			"call":            2,
+			"region-fallback": 1,
+		}
+
 		put := func(address uint64, name, source string) {
-			if _, ok := byStart[address]; !ok {
+			if _, exists := byStart[address]; !exists {
 				return
 			}
 
-			old, exists := seeds[address]
+			old, found := seeds[address]
 
-			if !exists ||
-				(source == "symbol" && old.source != "symbol") ||
-				(source == "entry" &&
-					old.source == "region-fallback") {
+			if !found || priority[source] > priority[old.source] {
 				seeds[address] = seed{
 					name:   name,
 					source: source,
@@ -161,7 +184,9 @@ func Recover(
 			}
 		}
 
-		// Prefer named ELF functions.
+		// Symbols are strong evidence of entry points.
+		// Do not split an accepted FDE merely because another
+		// function symbol points inside its recorded range.
 		for _, sym := range symbols(parsed) {
 			if sym.Type != elf.STT_FUNC ||
 				sym.SectionIndex == uint32(elf.SHN_UNDEF) ||
@@ -174,15 +199,17 @@ func Recover(
 				continue
 			}
 
-			put(
-				sym.Value&^thumbBit(parsed),
-				sym.Name,
-				"symbol",
-			)
+			address := sym.Value &^ thumbBit(parsed)
+
+			if insideFrame(address) {
+				continue
+			}
+
+			put(address, sym.Name, "symbol")
 		}
 
-		// The ELF entry point is also a candidate.
-		if parsed.Object == nil {
+		if parsed.Object == nil &&
+			parsed.Header.Type != elf.ET_REL {
 			put(
 				parsed.Info.Entry&^thumbBit(parsed),
 				"_entry",
@@ -190,11 +217,19 @@ func Recover(
 			)
 		}
 
-		// Discover functions without symbol names.
+		// Accepted unwind ranges provide new entry candidates.
+		for start := range fdeEnds {
+			put(start, "", "eh-frame")
+		}
+
+		// Direct calls remain useful when unwind evidence
+		// is absent. A call into an FDE's interior is not
+		// automatically a separate function boundary.
 		for _, call := range graph.Calls {
 			if call.HasTarget &&
 				!call.Indirect &&
-				call.Symbol == "" {
+				call.Symbol == "" &&
+				!insideFrame(call.Target) {
 				put(call.Target, "", "call")
 			}
 		}
@@ -221,6 +256,18 @@ func Recover(
 
 		isSeed := make(map[int]bool)
 
+		// Blocks entirely inside a validated unwind range
+		// belong to that range's function candidate.
+		fdeOwner := make(map[int]uint64)
+
+		for start, end := range fdeEnds {
+			for id, block := range graph.Blocks {
+				if block.Start >= start && block.End <= end {
+					fdeOwner[id] = start
+				}
+			}
+		}
+
 		for _, entry := range entries {
 			isSeed[byStart[entry]] = true
 		}
@@ -243,6 +290,9 @@ func Recover(
 
 		for _, entry := range entries {
 			s := seeds[entry]
+
+			// Retrieve the unwind range for this function.
+			endBound, bounded := fdeEnds[entry]
 
 			name := s.name
 			if name == "" {
@@ -271,6 +321,22 @@ func Recover(
 				// Do not cross into another known
 				// function's entry block.
 				if isSeed[id] && id != byStart[entry] {
+					continue
+				}
+
+				block := graph.Blocks[id]
+
+				// A function with unwind boundaries cannot claim
+				// blocks extending outside its recorded range.
+				if bounded &&
+					(block.Start < entry || block.End > endBound) {
+					continue
+				}
+
+				// Do not let another function candidate claim
+				// blocks inside an accepted FDE.
+				if owner, protected := fdeOwner[id]; protected &&
+					owner != entry {
 					continue
 				}
 
@@ -305,6 +371,61 @@ func Recover(
 
 			result = append(result, fn)
 		}
+	}
+
+	return result
+}
+
+func frameBounds(
+	graph cfg.Graph,
+	ranges []UnwindRange,
+) map[uint64]uint64 {
+	result := make(map[uint64]uint64)
+
+	if len(graph.Blocks) == 0 {
+		return result
+	}
+
+	byStart := make(map[uint64]bool, len(graph.Blocks))
+
+	for _, block := range graph.Blocks {
+		byStart[block.Start] = true
+	}
+
+	var valid []UnwindRange
+
+	sectionEnd := graph.Blocks[len(graph.Blocks)-1].End
+
+	for _, r := range ranges {
+		if r.Start >= r.End ||
+			!byStart[r.Start] ||
+			r.End > sectionEnd {
+			continue
+		}
+
+		valid = append(valid, r)
+	}
+
+	sort.Slice(valid, func(i, j int) bool {
+		if valid[i].Start != valid[j].Start {
+			return valid[i].Start < valid[j].Start
+		}
+		return valid[i].End < valid[j].End
+	})
+
+	// Overlapping FDEs are ambiguous and cannot
+	// establish exclusive ownership.
+	for i, r := range valid {
+		if i > 0 && valid[i-1].End > r.Start {
+			continue
+		}
+
+		if i+1 < len(valid) &&
+			r.End > valid[i+1].Start {
+			continue
+		}
+
+		result[r.Start] = r.End
 	}
 
 	return result
