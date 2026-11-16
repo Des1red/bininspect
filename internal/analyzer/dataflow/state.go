@@ -306,6 +306,7 @@ func (s *state) step(
 		s.regs["rsp"] = Value{
 			Kind:        "stack-address",
 			StackOffset: bp.StackOffset + word,
+			Origin:      bp.Origin,
 		}
 
 	case "MOV", "MOVABS", "MOVZX", "MOVSX", "MOVSXD":
@@ -322,9 +323,16 @@ func (s *state) step(
 			var v Value
 
 			if offset, ok := s.stackAddress(args[1]); ok {
+				base := canonicalRegister(
+					args[1].Memory.Base,
+				)
+
+				origin := s.regs[base].Origin
+
 				v = Value{
 					Kind:        "stack-address",
 					StackOffset: offset,
+					Origin:      origin,
 				}
 			}
 
@@ -395,6 +403,32 @@ func (s *state) step(
 		s.write(args[0], v, arch, word)
 
 	case "AND":
+		// An x86 stack alignment creates a new symbolic
+		// stack-coordinate origin.
+		//
+		// This is NOT equivalent to the original entry SP.
+		if word == 4 &&
+			len(args) == 2 &&
+			args[0].Kind == decoder.OperandRegister &&
+			strings.EqualFold(args[0].Register, "ESP") &&
+			args[1].Kind == decoder.OperandImmediate &&
+			uint32(args[1].Immediate) == 0xfffffff0 &&
+			s.regs["rsp"].Kind == "stack-address" {
+
+			s.regs = map[string]Value{
+				"rsp": {
+					Kind:        "stack-address",
+					StackOffset: 0,
+					Origin:      "aligned-SP",
+				},
+			}
+
+			// References using the old stack coordinate
+			// must not alias this new coordinate.
+			s.stack = make(map[int64]Value)
+
+			return
+		}
 		if len(args) > 0 {
 			if args[0].Kind == decoder.OperandRegister &&
 				canonicalRegister(args[0].Register) == "rsp" {

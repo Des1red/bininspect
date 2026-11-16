@@ -22,6 +22,11 @@ func PLTTargets(
 ) map[uint64]string {
 	result := make(map[uint64]string)
 
+	if parsed != nil &&
+		parsed.Info.Architecture == binary.ArchX86 {
+		return pltTargetsI386(parsed, graphs)
+	}
+
 	if parsed == nil ||
 		parsed.Object != nil ||
 		parsed.Info.Architecture != binary.ArchX8664 {

@@ -8,6 +8,7 @@ type Value struct {
 	Kind        string // "constant" or "stack-address"
 	Number      int64
 	StackOffset int64 // relative to the entry stack pointer
+	Origin      string
 }
 
 func (v Value) String() string {
@@ -15,7 +16,17 @@ func (v Value) String() string {
 	case "constant":
 		return fmt.Sprintf("%#x", v.Number)
 	case "stack-address":
-		return fmt.Sprintf("entry-SP%+d", v.StackOffset)
+		if v.Origin == "aligned-SP" {
+			return fmt.Sprintf(
+				"aligned-SP%+d",
+				v.StackOffset,
+			)
+		}
+
+		return fmt.Sprintf(
+			"entry-SP%+d",
+			v.StackOffset,
+		)
 	default:
 		return "unknown"
 	}
