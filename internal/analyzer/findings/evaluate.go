@@ -27,6 +27,7 @@ type Finding struct {
 	Section        int
 	Address        uint64
 	HasAddress     bool
+	ManualGuidance *ManualGuidance
 }
 
 type apiRisk struct {

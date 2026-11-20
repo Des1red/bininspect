@@ -147,6 +147,12 @@ func AnalyzeELF(
 		result.Security,
 	)
 
+	result.Findings = findings.AddManualGuidance(
+		result.Findings,
+		result.DataFlow,
+		result.Graphs,
+	)
+
 	result.Warnings = append(
 		result.Warnings,
 		result.DataFlow.Warnings...,

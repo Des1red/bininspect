@@ -82,6 +82,8 @@ func Findings(r analyzer.Result) {
 			"Recommendation: "+finding.Recommendation,
 		)
 
+		renderManualGuidance(finding.ManualGuidance)
+
 		box(
 			fmt.Sprintf(
 				"FINDING %02d  %s",
